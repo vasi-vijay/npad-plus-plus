@@ -83,13 +83,27 @@ public struct DocumentationAndSupportView: View {
             Divider()
 
             // Footer with GitHub and Action Buttons
-            HStack {
+            HStack(spacing: 12) {
+                Button(action: {
+                    if let url = URL(string: AppStateManager.authorInstagramURL) {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "camera.fill")
+                            .foregroundColor(.pink)
+                        Text("Made By Vijay")
+                            .fontWeight(.medium)
+                    }
+                }
+                .help("Made By Vijay (@made.by.vijay on Instagram)")
+
                 Button(action: {
                     if let url = URL(string: AppStateManager.githubRepositoryURL) {
                         NSWorkspace.shared.open(url)
                     }
                 }) {
-                    Label("GitHub Repository", systemImage: "link")
+                    Label("GitHub", systemImage: "link")
                 }
 
                 Button(action: {
@@ -97,7 +111,7 @@ public struct DocumentationAndSupportView: View {
                         NSWorkspace.shared.open(url)
                     }
                 }) {
-                    Label("Report Issue", systemImage: "exclamationmark.bubble")
+                    Label("Issues", systemImage: "exclamationmark.bubble")
                 }
 
                 Spacer()
@@ -324,6 +338,13 @@ public struct DocumentationAndSupportView: View {
                 .foregroundColor(.secondary)
 
             VStack(spacing: 10) {
+                linkBox(
+                    title: "Made By Vijay",
+                    subtitle: "https://www.instagram.com/made.by.vijay",
+                    icon: "camera.fill",
+                    url: AppStateManager.authorInstagramURL
+                )
+
                 linkBox(
                     title: "Official GitHub Repository",
                     subtitle: AppStateManager.githubRepositoryURL,

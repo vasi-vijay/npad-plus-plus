@@ -154,6 +154,17 @@ public struct NativeWelcomeContentView: View {
                 }
 
                 NativeWelcomeActionRow(
+                    icon: "camera.fill",
+                    iconColor: .pink,
+                    title: "Made By Vijay",
+                    subtitle: "Follow @made.by.vijay on Instagram."
+                ) {
+                    if let url = URL(string: AppStateManager.authorInstagramURL) {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+
+                NativeWelcomeActionRow(
                     icon: "arrow.up.right.square",
                     iconColor: .gray,
                     title: "GitHub Repository",
@@ -340,14 +351,29 @@ public struct NativeFeaturesContentView: View {
 
             Divider()
 
-            // Bottom Bar: GitHub & Start Coding
-            HStack {
+            // Bottom Bar: GitHub, Made By Vijay & Start Coding
+            HStack(spacing: 12) {
+                Button(action: {
+                    if let url = URL(string: AppStateManager.authorInstagramURL) {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "camera.fill")
+                            .foregroundColor(.pink)
+                        Text("Made By Vijay")
+                    }
+                    .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+
                 Button(action: {
                     if let url = URL(string: AppStateManager.githubRepositoryURL) {
                         NSWorkspace.shared.open(url)
                     }
                 }) {
-                    Label("GitHub Repository", systemImage: "link")
+                    Label("GitHub", systemImage: "link")
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.plain)

@@ -1730,6 +1730,8 @@ struct StandaloneRunner {
         runTest("testGitHubRepositoryURLs") {
             try assertEqual(AppStateManager.githubRepositoryURL, "https://github.com/vasi-vijay/npad-plus-plus")
             try assertEqual(AppStateManager.githubIssuesURL, "https://github.com/vasi-vijay/npad-plus-plus/issues")
+            try assertEqual(AppStateManager.authorTag, "Made By Vijay")
+            try assertEqual(AppStateManager.authorInstagramURL, "https://www.instagram.com/made.by.vijay")
         }
 
         runTest("testDualPaneIndependentTabsAndMovement") {

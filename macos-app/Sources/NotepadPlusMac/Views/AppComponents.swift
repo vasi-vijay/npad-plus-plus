@@ -2315,6 +2315,14 @@ public struct HelpCommands: Commands {
                     NSWorkspace.shared.open(url)
                 }
             }
+
+            Divider()
+
+            Button("Made By Vijay (@made.by.vijay)") {
+                if let url = URL(string: AppStateManager.authorInstagramURL) {
+                    NSWorkspace.shared.open(url)
+                }
+            }
         }
     }
 }

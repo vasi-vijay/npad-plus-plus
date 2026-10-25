@@ -727,12 +727,14 @@ public class AppStateManager: ObservableObject {
     // Documentation View UI State (Macro-free)
     @Published public var documentationSelectedTab: String = "Shortcuts"
 
-    // Official GitHub Links
+    // Official GitHub Links & Author Attribution
     public static let githubRepositoryURL: String = "https://github.com/vasi-vijay/npad-plus-plus"
     public static let githubIssuesURL: String = "https://github.com/vasi-vijay/npad-plus-plus/issues"
     public static let githubRepoURL = URL(string: "https://github.com/vasi-vijay/npad-plus-plus")!
     public static let githubNewIssueURL = URL(string: "https://github.com/vasi-vijay/npad-plus-plus/issues/new")!
     public static let documentationURL = URL(string: "https://github.com/vasi-vijay/npad-plus-plus#readme")!
+    public static let authorTag: String = "Made By Vijay"
+    public static let authorInstagramURL: String = "https://www.instagram.com/made.by.vijay"
 
     @Published public var workspaceRootURL: URL? = nil
 
