@@ -1,0 +1,579 @@
+Priority 0: Faithful Notepad++ UI and Feature Replication
+Objective
+Transform the existing CodePad application into a highly faithful Notepad++-style editor for macOS.
+The goal is to reproduce the recognizable Notepad++ desktop experience as closely as practical, including its layout, menus, toolbar, document tabs, editor, line-number gutter, syntax highlighting, search dialogs, navigation panels, status bar, and editing workflows.
+This is not merely a request for a similar-looking code editor. I want the familiar Notepad++ interface, interaction patterns, and core features implemented in the existing application, adapted appropriately for macOS.
+Reference: Use the official Notepad++ application as the visual and functional reference. If screenshots or reference assets are available, inspect them and use them to guide layout and styling decisions.
+1. Reproduce the Notepad++ Layout
+Implement the following interface structure where supported by the existing architecture:
+	1	Application menu bar
+	◦	File
+	◦	Edit
+	◦	Search
+	◦	View
+	◦	Encoding
+	◦	Language
+	◦	Settings
+	◦	Tools
+	◦	Macro
+	◦	Run
+	◦	Plugins
+	◦	Window
+	◦	Help
+	2	Toolbar
+	◦	New, Open, Save, and Save All.
+	◦	Print and other supported file operations.
+	◦	Cut, Copy, Paste, Undo, and Redo.
+	◦	Find, Replace, and navigation actions.
+	◦	Zoom controls.
+	◦	Macro and plugin actions where implemented.
+	3	Document tab bar
+	◦	Multiple open documents.
+	◦	Active and inactive tab styling.
+	◦	Unsaved-change indicators.
+	◦	File-type or document icons where appropriate.
+	◦	Tab close controls.
+	◦	Clear handling of long filenames.
+	◦	Context menus for document actions.
+	4	Main editor
+	◦	Monospaced text editing.
+	◦	Line-number gutter.
+	◦	Active-line highlighting.
+	◦	Syntax highlighting.
+	◦	Text selection.
+	◦	Current-file search highlighting.
+	◦	Optional word wrap.
+	◦	Horizontal and vertical scrolling.
+	◦	Bookmarks and folding indicators where supported.
+	5	Optional navigation and tool panels
+	◦	Document list.
+	◦	Function or symbol navigation.
+	◦	Find results.
+	◦	Project or folder explorer.
+	◦	Integrated terminal.
+	◦	Other existing developer tools.
+	6	Status bar
+	◦	Current line and column.
+	◦	Selection information.
+	◦	Document length where practical.
+	◦	File encoding.
+	◦	Line-ending format.
+	◦	Current programming language.
+	◦	Insert/overwrite mode where supported.
+	◦	Zoom level where appropriate.
+Follow Notepad++'s recognizable layout and information hierarchy. Keep the interface compact and optimized for code editing rather than redesigning it as a modern card-based dashboard.
+2. Match Notepad++ Visual Styling
+Study the reference application's visual conventions and reproduce them as closely as possible.
+Pay particular attention to:
+	•	Menu and toolbar height.
+	•	Icon placement and spacing.
+	•	Document tab dimensions and borders.
+	•	Active-tab appearance.
+	•	Editor margins and line-number gutter.
+	•	Font sizing and line spacing.
+	•	Selection colors.
+	•	Active-line background.
+	•	Syntax colors.
+	•	Search and replace dialog layouts.
+	•	Status-bar positioning.
+	•	Split-view dividers.
+	•	Panel visibility and resizing.
+	•	Context menus.
+	•	Light and dark themes.
+Avoid introducing unrelated visual design choices, oversized controls, excessive rounded cards, unnecessary gradients, or decorative animations.
+The result should immediately feel familiar to someone who regularly uses Notepad++.
+3. Match Notepad++ Editing Behavior
+Implement the actual operations behind the UI, not just visual controls.
+Prioritize these features:
+	•	Multiple documents and tabs.
+	•	New, Open, Save, Save As, and Save All.
+	•	Unsaved-document indicators and close confirmation.
+	•	Undo and redo.
+	•	Find, Find Next, Find Previous, Replace, and Replace All.
+	•	Search across files where supported.
+	•	Case-sensitive, whole-word, and regular-expression search.
+	•	Go to Line.
+	•	Bookmarks and navigation between bookmarks.
+	•	Word wrap.
+	•	Zoom in and out.
+	•	Language selection.
+	•	Automatic language detection.
+	•	Syntax highlighting.
+	•	Encoding and line-ending controls.
+	•	Show whitespace and end-of-line markers.
+	•	Indentation and tab-width configuration.
+	•	Line operations such as duplicate, move, and delete.
+	•	Comment and uncomment commands where supported.
+	•	Split-view editing where feasible.
+	•	Recent files.
+	•	Session restoration.
+	•	Keyboard shortcuts and context menus.
+Each visible action must perform its advertised operation. Disable or clearly label features that are not yet implemented rather than presenting nonfunctional controls.
+4. Match Notepad++ Language and Syntax Support
+Implement a language-selection menu and reliable syntax highlighting for the languages supported by the existing editor.
+Include Java, JavaScript, TypeScript, Python, C, C++, C#, Go, Rust, Swift, HTML, CSS, XML, JSON, YAML, SQL, Bash, Markdown, properties files, Gradle, Maven, and plain text.
+Support language-specific token colors, comments, strings, keywords, numbers, and other relevant constructs.
+Use a suitable existing syntax engine or parser where practical. Do not simulate syntax highlighting with a single generic set of regular expressions.
+Changing the language must update the active document's syntax highlighting without changing its text, cursor, selection, font, or search state.
+5. Preserve Notepad++-Style Search and Dialogs
+Search is a core part of the Notepad++ experience.
+Create a familiar Find/Replace interface with:
+	•	Find what.
+	•	Replace with.
+	•	Find Next and Find Previous.
+	•	Replace and Replace All.
+	•	Match case.
+	•	Match whole word.
+	•	Regular expression mode.
+	•	Search direction and wrap options where appropriate.
+	•	Search in current document.
+	•	Find in files and directory selection where implemented.
+	•	Clear match counts and no-results feedback.
+Use native macOS conventions where necessary, but preserve the recognizable structure and workflow of Notepad++ search dialogs.
+Ensure the search implementation works correctly with Unicode text and does not interfere with syntax highlighting or selection.
+6. Keep the UI Faithful While Supporting macOS
+This application is intended for Apple Silicon Macs. Reproduce Notepad++'s visual and functional identity without pretending that the original Windows application is running natively.
+Preserve:
+	•	Native macOS window management.
+	•	Proper keyboard focus and accessibility.
+	•	Correct Apple Silicon ARM64 compatibility.
+	•	Native file dialogs and filesystem permissions.
+	•	macOS menu-bar integration where appropriate.
+	•	Light and dark appearance support.
+	•	Reliable terminal and shell integration.
+Use macOS-appropriate adaptations only where necessary for usability, platform conventions, or technical compatibility. Do not use platform differences as a reason to unnecessarily redesign the whole interface.
+7. Reference-Based Validation
+Compare the implemented interface with available Notepad++ reference screenshots or a reference installation.
+Check:
+	•	Overall layout proportions.
+	•	Menu organization.
+	•	Toolbar placement.
+	•	Tab appearance.
+	•	Editor and gutter dimensions.
+	•	Search dialog structure.
+	•	Status-bar content.
+	•	Theme consistency.
+	•	Common editing workflows.
+If the reference application or screenshots are unavailable, document the assumptions used. Do not claim pixel-perfect matching without a direct visual comparison.
+8. Preserve All Existing Requirements
+This visual and functional replication requirement is additive. It must not remove the existing requirements for:
+	•	A real persistent-shell terminal supporting cd, ls, and Java commands.
+	•	Opening the terminal in the appropriate workspace or file directory.
+	•	Correct font propagation from AppStateManager.
+	•	Correct text rendering and document synchronization.
+	•	Reliable selection, marking, and search highlighting.
+	•	Incremental syntax highlighting.
+	•	Memoized or equivalent optimized gutter rendering.
+	•	Accessible light and dark themes.
+	•	Verified contrast ratios for gutter numbers and active-line highlighting.
+	•	The correct application icon.
+	•	Removal of the user-facing name Apple Silicon Arm64.
+	•	Production-grade error handling and regression testing.
+Implement the Notepad++ interface and features in the existing project. Do not start a new application or discard existing working functionality.
+Final Acceptance Criteria
+The application should closely resemble Notepad++ in its layout, menus, toolbar, tabs, editor, dialogs, status bar, and common editing workflows. Core features must work correctly, while macOS-specific integration, Apple Silicon compatibility, terminal reliability, accessibility, and editor performance remain intact.
+CodePad — Production-Grade macOS Editor: Terminal, Editor Performance, Themes, and UI Fixes
+Project Context
+I have an existing Notepad++-inspired macOS code editor targeting Apple Silicon Macs (M1, M2, M3, M4, and newer).
+The application already builds successfully. I want to improve its reliability, performance, terminal integration, accessibility, and overall UI quality.
+Work on the existing project. Do not recreate the application from scratch or remove working features.
+Inspect the repository and identify the actual implementation before modifying code. The project includes or may include:
+	•	EditorArea
+	•	AppStateManager
+	•	src/index.css
+	•	lib/themeConfig.ts
+	•	A native macOS shell or backend
+	•	An integrated terminal
+	•	File management and multiple document tabs
+	•	Syntax highlighting and language detection
+	•	Light and dark themes
+Some components may use different technologies. Determine the actual architecture before applying changes.
+
+Priority 1: Fix the Integrated Terminal Completely
+The integrated terminal is not behaving correctly. Make it a reliable, usable terminal for everyday development on macOS.
+1.1 Support Real Shell Commands
+Ensure the terminal runs a genuine interactive macOS shell rather than simulating command execution inside the UI.
+Commands that must work include:
+code
+Bash
+
+pwd
+ls
+ls -la
+cd /path/to/directory
+java -version
+which java
+/usr/libexec/java_home -V
+echo "Terminal works"
+clear
+Also support normal shell features such as:
+	•	Relative and absolute paths.
+	•	Command history.
+	•	Environment variables.
+	•	Shell initialization.
+	•	Interactive command execution.
+	•	Standard output and standard error.
+	•	Exit codes.
+	•	Long-running processes.
+	•	Keyboard input while commands are running.
+	•	Ctrl+C to interrupt a running process.
+	•	Working-directory changes that persist between commands.
+	•	Normal shell prompts and command completion when supported by the terminal engine.
+Do not implement cd, ls, or java as special hardcoded commands. Execute them through the actual shell and operating-system environment.
+Use the user's configured shell, such as zsh or Bash, with a sensible fallback if the preferred shell is unavailable.
+1.2 Use a Persistent Interactive Shell
+A common terminal bug is starting a new process for every command. This causes commands such as cd to lose their working-directory changes.
+Use one persistent shell session for each terminal instance.
+For example, executing:
+code
+Bash
+
+cd /tmp
+pwd
+must report /tmp on the second command, and subsequent commands must continue running from that directory.
+Do not implement command execution as independent calls to Process or exec for every submitted line if doing so prevents shell state from persisting.
+If using a native macOS implementation, evaluate a proper pseudo-terminal (PTY) with a persistent shell process. If using an existing terminal emulator, use its supported process and session APIs.
+Do not build a terminal by merely displaying command text and captured output.
+1.3 Open the Terminal in the Correct File or Project Directory
+The terminal must open in the directory relevant to the user's current work.
+Required directory-resolution behavior
+Use this priority order:
+	1	If a project or workspace folder is open, start in the workspace root.
+	2	If an active file belongs to an open project, start in the project root when the user is working in project mode.
+	3	If the active file is opened independently, start in the directory containing that file.
+	4	If no file or workspace is open, use the configured default terminal directory.
+	5	If the selected directory no longer exists or is inaccessible, fall back gracefully and display a useful message.
+Support paths containing spaces and Unicode characters.
+For example, if the active file is:
+/Users/example/Projects/Java Demo/src/Main.java
+the terminal should start in the appropriate directory according to the rules above. In standalone-file mode, this would be:
+/Users/example/Projects/Java Demo/src
+The initial prompt should reflect the actual working directory.
+Display the initial directory in the terminal header or status area if the existing design supports it.
+1.4 Synchronize Terminal Directory with File Navigation
+Implement a clear, predictable relationship between the editor and terminal.
+	•	Opening a project should establish its root directory.
+	•	Opening a standalone file should make its containing directory available to the terminal.
+	•	Opening the terminal should resolve the correct directory.
+	•	Switching projects must not accidentally reuse a previous project's directory.
+	•	Existing terminal sessions must not have their current directory silently overwritten when the user switches files.
+	•	Provide an explicit action such as Open Terminal Here or Change Terminal Directory.
+	•	Allow the user to open a terminal in a selected folder.
+	•	Provide a way to return to the project root.
+	•	Support multiple terminal tabs if practical.
+When a terminal is already running, distinguish between its current working directory and the editor's currently selected file directory.
+Do not silently change an active shell's directory every time the user switches editor tabs.
+1.5 Java Environment Support
+Java commands must use the environment available to the application.
+Support:
+code
+Bash
+
+java -version
+javac -version
+which java
+echo $JAVA_HOME
+/usr/libexec/java_home -V
+Requirements:
+	•	Preserve the user's appropriate shell environment.
+	•	Initialize the shell correctly for interactive use.
+	•	Do not assume Java is installed at a fixed location.
+	•	Do not hardcode a JDK path.
+	•	Handle JAVA_HOME and PATH correctly.
+	•	Show the actual error if Java is not installed or is unavailable.
+	•	Support Java versions installed through common macOS installation methods, including Homebrew and standard JDK installers, where their environment is configured.
+	•	Ensure the terminal uses the correct Apple Silicon architecture when launching native processes.
+Do not silently modify the user's shell configuration or install software.
+1.6 Terminal UI and Interaction
+Ensure the terminal:
+	•	Opens and closes reliably.
+	•	Can be resized with the main window.
+	•	Supports scrolling through output.
+	•	Displays long output without clipping.
+	•	Handles ANSI colors when supported by the terminal renderer.
+	•	Uses a readable monospace font.
+	•	Supports light and dark appearances.
+	•	Preserves terminal session state while the panel is hidden and shown.
+	•	Provides clear startup and process error messages.
+	•	Does not freeze the editor while commands run.
+	•	Does not lose keystrokes during rapid typing.
+	•	Cleans up child processes appropriately when a session is intentionally terminated.
+	•	Distinguishes closing the terminal panel from terminating its shell process.
+If using a web-based terminal, choose an appropriate terminal emulator such as xterm.js if compatible with the existing architecture, with a reliable PTY bridge on macOS. Do not simply place a text area inside a panel and label it a terminal.
+If using a native terminal implementation, use an appropriate terminal renderer and PTY integration.
+1.7 Terminal Security
+	•	Never execute commands automatically just because a file is opened.
+	•	Never execute arbitrary file contents as shell commands.
+	•	Do not silently elevate privileges.
+	•	Do not automatically run destructive commands.
+	•	Respect user confirmation for terminal termination or other destructive operations where appropriate.
+	•	Keep the terminal's process lifecycle and filesystem permissions predictable.
+
+Priority 2: Optimize EditorArea Rendering Performance
+Refactor EditorArea to reduce unnecessary rendering work during rapid typing.
+The objective is to keep the editor responsive without sacrificing syntax highlighting, font selection, selection behavior, search, or correctness.
+2.1 Profile Before Refactoring
+Inspect the existing rendering architecture.
+Determine whether the editor uses:
+	•	SwiftUI and NSTextView.
+	•	React components and a web-based editor.
+	•	A custom text-rendering component.
+	•	A combination of native and web components.
+Do not apply React memoization APIs to native SwiftUI components or SwiftUI techniques to React components.
+Identify which components and calculations are actually causing expensive updates.
+2.2 Memoize Line Gutter Rendering
+If EditorArea uses React:
+	•	Extract the line-number gutter into a dedicated component.
+	•	Use React.memo where the component's inputs are stable.
+	•	Pass stable props rather than newly allocated objects on every render.
+	•	Use useMemo for expensive derived data only where profiling justifies it.
+	•	Use useCallback for relevant event handlers when it prevents unnecessary child renders.
+	•	Avoid recreating large arrays of line numbers on every keystroke.
+	•	Ensure scrolling and visible-line calculations are efficient.
+	•	Use stable keys for rendered lines.
+	•	Avoid storing redundant copies of line-count state.
+The gutter should update when line counts, visible ranges, font metrics, wrapping behavior, or relevant layout settings change—not simply because unrelated application state changes.
+If the editor uses a native component, use the equivalent architecture to avoid rebuilding the entire editor or gutter for unrelated state changes.
+2.3 Optimize Syntax Highlighting
+	•	Identify the current syntax-highlighting engine.
+	•	Avoid recalculating the entire document's syntax on every keystroke for large files.
+	•	Use incremental tokenization or parsing when supported.
+	•	Recalculate only affected regions where practical.
+	•	Correctly handle multiline comments, strings, and delimiters that affect subsequent lines.
+	•	Prevent stale asynchronous highlighting results from overwriting newer document state.
+	•	Preserve the user's selection and cursor.
+	•	Avoid resetting the entire text buffer or attributed string unnecessarily.
+	•	Keep syntax highlighting independent of font settings and theme state.
+	•	Ensure line insertion and deletion do not desynchronize the gutter.
+If using React and a dedicated editor engine, use the engine's incremental update APIs.
+If using NSTextView, use an appropriate text-storage and attribute-update strategy rather than replacing the entire attributed string after every change.
+2.4 Preserve Correctness
+Performance improvements must not break:
+	•	Text input.
+	•	Cursor positioning.
+	•	Selection and copy/paste.
+	•	Undo and redo.
+	•	Search and replace.
+	•	Syntax highlighting.
+	•	Language switching.
+	•	Line numbers.
+	•	Word wrapping.
+	•	Font changes.
+	•	Theme switching.
+	•	Multiple documents and tabs.
+	•	File saving and encoding.
+Do not memoize components with incorrect equality checks that cause stale content, fonts, themes, or line numbers to remain visible.
+Do not add arbitrary caching layers without a clear invalidation strategy.
+2.5 Performance Verification
+Measure or inspect:
+	•	Render frequency during rapid typing.
+	•	Time spent updating the gutter.
+	•	Syntax-highlighting update cost.
+	•	UI responsiveness for large files.
+	•	Memory use where practical.
+	•	Whether font and theme changes update the correct components.
+	•	Whether document switching produces stale rendering.
+Add targeted regression tests and provide evidence of the improvements where the available environment permits.
+
+Priority 3: Review All CSS Variables and Theme Configuration
+Review and update the complete relevant theme implementation in:
+	•	src/index.css
+	•	lib/themeConfig.ts
+Also inspect other theme files or editor-specific styles if they affect the same elements.
+Do not modify only these two files if the actual contrast problem originates elsewhere.
+3.1 Centralize Theme Tokens
+Establish a consistent set of semantic color tokens for light and dark modes.
+Include tokens for:
+	•	Application background.
+	•	Primary and secondary surfaces.
+	•	Primary text.
+	•	Secondary text.
+	•	Muted text.
+	•	Borders and separators.
+	•	Accent color.
+	•	Focus indicators.
+	•	Editor background.
+	•	Editor foreground.
+	•	Line-number gutter background.
+	•	Normal gutter text.
+	•	Active line background.
+	•	Active line number.
+	•	Text selection background.
+	•	Selected text foreground.
+	•	Search match background.
+	•	Current search match background.
+	•	Cursor color.
+	•	Syntax-highlight colors.
+	•	Disabled controls.
+	•	Error, warning, and success indicators.
+	•	Terminal background and foreground.
+	•	Terminal selection and ANSI colors.
+Use consistent token names between CSS and TypeScript configuration.
+Avoid maintaining contradictory hardcoded colors in components that bypass the shared theme system.
+3.2 Accessibility and Contrast Requirements
+Target WCAG 2.2 AA contrast requirements for applicable UI elements.
+For normal text:
+	•	At least 4.5:1 contrast between text and background.
+For large text:
+	•	At least 3:1 contrast.
+For meaningful non-text UI indicators, boundaries, and graphical elements:
+	•	Target at least 3:1 contrast against adjacent colors where WCAG requires it.
+Pay particular attention to:
+	1	Line-number gutter text against the gutter background.
+	2	Active line numbers against the active line background.
+	3	Editor text against the editor background.
+	4	Selected text against the selection background.
+	5	Search matches against syntax-highlighted text.
+	6	Current search matches against the editor background.
+	7	Disabled and secondary controls where text remains intended to be readable.
+	8	Terminal text and ANSI colors.
+	9	Borders and focus indicators.
+Do not assume that muted colors are accessible simply because they look visually subtle.
+Measure contrast ratios mathematically and report the actual ratios for important text/background pairs in both themes.
+3.3 Active Line Highlighting
+Fix active-line highlighting so it remains visible without distracting from the code.
+Requirements:
+	•	Use a subtle but perceptible background difference.
+	•	Ensure the active line number remains readable.
+	•	Preserve syntax colors on the active line.
+	•	Keep the text selection clearly distinguishable.
+	•	Ensure the cursor remains visible.
+	•	Avoid using the same background for active lines, selections, and search matches.
+	•	Maintain consistent behavior during scrolling, editing, and theme switching.
+If the editor engine supports native active-line decorations, use them where appropriate.
+Do not apply an opaque active-line overlay that hides the code.
+3.4 Syntax Color Accessibility
+Review syntax colors in both light and dark modes.
+Ensure keywords, strings, comments, types, numbers, operators, and errors remain distinguishable.
+Do not rely solely on hue differences. Use adequate contrast and preserve readable foreground/background combinations.
+Check how syntax colors interact with:
+	•	Active line backgrounds.
+	•	Selected text.
+	•	Search results.
+	•	Persistent text marks.
+	•	Inline diagnostics.
+	•	Theme changes.
+3.5 Theme Synchronization
+Ensure lib/themeConfig.ts and src/index.css agree.
+	•	Use one authoritative theme definition or a clearly documented mapping.
+	•	Prevent CSS variables from being overwritten by stale runtime configuration.
+	•	Ensure switching themes updates all editor components.
+	•	Ensure the editor and terminal follow the intended theme policy.
+	•	Respect system appearance when configured.
+	•	Preserve the user's font and document state when switching themes.
+If colors are generated programmatically, ensure the generated values are validated before being applied.
+
+Priority 4: Fix Existing Editor and UI Defects
+Preserve all previous requirements and existing fixes.
+Verify:
+	•	Font family and size propagate from AppStateManager to the actual editor.
+	•	Fonts render correctly in light and dark modes.
+	•	Native text selection works.
+	•	Persistent marks, search highlights, and syntax highlighting remain independent.
+	•	Language detection works for Java, JavaScript, TypeScript, Python, Swift, C/C++, C#, Go, Rust, HTML, CSS, XML, JSON, YAML, SQL, Bash, Markdown, properties files, Gradle, Maven, and logs.
+	•	Current-file Find and Replace works correctly.
+	•	Tabs display the correct document and language.
+	•	Line numbers remain synchronized with document content.
+	•	Opening, saving, and switching files preserves content.
+	•	Application menus, toolbars, sidebars, and status bars are aligned.
+	•	Window resizing does not break the layout.
+	•	The application icon is correctly integrated into the .app bundle.
+	•	The unwanted user-facing name Apple Silicon Arm64 is removed without changing internal architecture settings.
+Do not rewrite working functionality unnecessarily.
+
+Priority 5: Production-Grade macOS Experience
+The application should feel like a professional macOS developer tool.
+Improve:
+	•	Native keyboard shortcuts.
+	•	Focus handling and keyboard navigation.
+	•	Window resizing and panel layouts.
+	•	Editor and terminal split-panel resizing.
+	•	Scroll performance.
+	•	Accessibility labels and keyboard focus indicators.
+	•	Empty states and useful error messages.
+	•	Tab layout and unsaved-change indicators.
+	•	Command palette and menu consistency, if implemented.
+	•	Settings persistence.
+	•	Theme consistency.
+	•	Application identity and metadata.
+	•	Startup and shutdown reliability.
+Use native macOS conventions where appropriate. Avoid unnecessary decoration, excessive animations, inconsistent controls, and arbitrary fixed dimensions.
+
+Implementation Workflow
+Phase 1: Inspect
+	•	Examine the repository and build configuration.
+	•	Locate EditorArea, AppStateManager, src/index.css, and lib/themeConfig.ts.
+	•	Identify the terminal implementation and how it launches processes.
+	•	Determine the actual rendering technology.
+	•	Trace active-file and workspace directory state.
+	•	Identify root causes before changing code.
+Phase 2: Fix Terminal
+	•	Implement a persistent interactive shell.
+	•	Correct the PTY or terminal-engine integration.
+	•	Fix working-directory resolution.
+	•	Validate shell initialization and Java environment inheritance.
+	•	Ensure terminal UI updates do not block the editor.
+Phase 3: Optimize the Editor
+	•	Optimize line-gutter rendering.
+	•	Reduce unnecessary syntax-highlighting work.
+	•	Implement correct memoization or equivalent native rendering optimizations.
+	•	Preserve document and editor state.
+Phase 4: Fix Themes and Accessibility
+	•	Centralize the color tokens.
+	•	Update src/index.css and lib/themeConfig.ts.
+	•	Calculate and verify contrast ratios.
+	•	Fix active-line and gutter contrast in both themes.
+	•	Validate selection, search, and syntax colors.
+Phase 5: Regression Testing
+Run the existing build and test suite.
+Add tests for:
+	•	Terminal working-directory persistence.
+	•	Terminal command execution.
+	•	Java environment detection.
+	•	Font propagation.
+	•	Editor synchronization.
+	•	Syntax-highlighting updates.
+	•	Gutter synchronization.
+	•	Theme changes.
+	•	Contrast ratios.
+	•	Search and selection.
+	•	Large-file performance where practical.
+Do not claim that commands or UI interactions work unless they have actually been tested.
+Phase 6: Final Verification
+Report:
+	•	Root causes identified.
+	•	Files changed.
+	•	Terminal implementation details.
+	•	Commands and workflows verified.
+	•	Editor performance changes.
+	•	Contrast measurements for both themes.
+	•	Build and test results.
+	•	Any remaining limitations.
+	•	The actual .app output path if successfully produced.
+
+Strict Requirements
+	1	Modify the existing project; do not recreate it.
+	2	Do not implement a fake terminal.
+	3	Do not hardcode command-specific behavior for cd, ls, or java.
+	4	Do not spawn a new shell for every command if that breaks persistent shell state.
+	5	Do not automatically execute arbitrary commands or file contents.
+	6	Do not introduce unnecessary dependencies.
+	7	Do not use React memoization techniques in native SwiftUI code.
+	8	Do not use CSS to fix native AppKit text rendering.
+	9	Do not optimize by sacrificing editor correctness.
+	10	Do not change only the appearance while leaving the underlying defects unresolved.
+	11	Do not regress file operations, tabs, fonts, syntax highlighting, search, or Apple Silicon compatibility.
+	12	Run actual tests and report failures honestly.
+	13	Implement the changes rather than stopping after analysis or a proposed plan.
+Final Acceptance Criteria
+The application builds successfully and provides:
+	•	A genuine interactive macOS terminal with working cd, ls, java, and normal shell commands.
+	•	A persistent working directory per terminal session.
+	•	Correct startup in the project root or active standalone file's directory according to the defined rules.
+	•	Responsive editor rendering with reduced unnecessary gutter and syntax-highlighting work.
+	•	Correct font propagation.
+	•	Accessible, consistent light and dark themes.
+	•	Measured and documented contrast ratios.
+	•	Correct active-line and gutter highlighting.
+	•	No regressions in existing editor functionality.
+	•	A polished, reliable macOS desktop experience suitable for continued production development.

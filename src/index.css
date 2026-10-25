@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --theme-bg: #ffffff;
+    --theme-fg: #000000;
+    --theme-gutter-bg: #f0f0f0;
+    --theme-gutter-fg: #606060;
+    --theme-gutter-border: #d4d4d4;
+    --theme-active-line-bg: #e8f2fe;
+    --theme-selection-bg: #cce8ff;
+    --theme-matched-bracket-bg: #b3d7ff;
+    --theme-tab-bg: #e6e6e6;
+    --theme-tab-active-bg: #ffffff;
+    --theme-tab-border: #cccccc;
+    --theme-scrollbar-thumb: rgba(0, 0, 0, 0.22);
+    --theme-scrollbar-thumb-hover: rgba(0, 0, 0, 0.45);
+    --theme-scrollbar-track: rgba(0, 0, 0, 0.03);
+    --theme-dialog-bg: #f8f9fa;
+    --theme-dialog-header-bg: #eaedf1;
+    --theme-dialog-border: #c2c8d0;
+    --theme-dialog-fg: #111827;
+    --theme-input-bg: #ffffff;
+    --theme-input-border: #9ca3af;
+    --theme-input-fg: #111827;
+    --editor-font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  body {
+    @apply antialiased select-none;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  textarea, input, [contenteditable="true"] {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+  }
+}
+
+/* Theme-Reactive Scrollbars across all views, editors, panels, and modals */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--theme-scrollbar-track, transparent);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--theme-scrollbar-thumb, rgba(128, 128, 128, 0.3));
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-scrollbar-thumb-hover, rgba(128, 128, 128, 0.5));
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox standard scrollbars */
+* {
+  scrollbar-color: var(--theme-scrollbar-thumb, rgba(128, 128, 128, 0.3)) var(--theme-scrollbar-track, transparent);
+  scrollbar-width: thin;
+}
+
+/* Dialog Theme Utility Classes */
+.theme-dialog {
+  background-color: var(--theme-dialog-bg);
+  color: var(--theme-dialog-fg);
+  border-color: var(--theme-dialog-border);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.35);
+}
+
+.theme-dialog-header {
+  background-color: var(--theme-dialog-header-bg);
+  border-color: var(--theme-dialog-border);
+  color: var(--theme-dialog-fg);
+}
+
+.theme-dialog-input {
+  background-color: var(--theme-input-bg);
+  border-color: var(--theme-input-border);
+  color: var(--theme-input-fg);
+}
+
+.theme-dialog-input:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: -1px;
+}
+
+/* High-DPI crisp monospace code font */
+.font-editor-code {
+  font-family: var(--editor-font-family);
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+  letter-spacing: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
