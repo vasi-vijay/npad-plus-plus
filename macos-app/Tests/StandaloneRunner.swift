@@ -2232,20 +2232,71 @@ struct StandaloneRunner {
 
         runTest("testAutoAppearanceFollowsSystemTheme") {
             let appState = AppStateManager()
+            var systemDark = false
+            appState.systemDarkProvider = { systemDark }
+
+            // System Light + Auto -> Light appearance, Classic theme
             appState.appearanceMode = .light
-            try assertEqual(appState.theme, "NPad++ Classic")
-            appState.theme = "Monokai"
             appState.appearanceMode = .auto
-            // Auto maps to the theme matching the system appearance
-            try assertEqual(appState.theme, AppStateManager.theme(forDark: appState.systemIsDark))
-            appState.theme = "GitHub"
-            appState.systemAppearanceDidChange()  // system flipped while in Auto
-            try assertEqual(appState.theme, AppStateManager.theme(forDark: appState.systemIsDark))
-            // Explicit Light/Dark ignore system changes
-            appState.appearanceMode = .dark
+            try assertEqual(appState.theme, "NPad++ Classic")
+            try assertEqual(appState.effectiveColorScheme, .light)
+            try assertFalse(appState.isDarkMode)
+
+            // macOS switches to Dark while the app is in Auto -> Dark appearance, Dark Modern theme
+            systemDark = true
             appState.systemAppearanceDidChange()
             try assertEqual(appState.theme, "Dark Modern")
+            try assertEqual(appState.effectiveColorScheme, .dark)
+            try assertTrue(appState.isDarkMode)
+
+            // ...and back to Light
+            systemDark = false
+            appState.systemAppearanceDidChange()
+            try assertEqual(appState.theme, "NPad++ Classic")
+            try assertEqual(appState.effectiveColorScheme, .light)
+
+            // Leaving a forced Dark override for Auto must not keep the stale Dark look while the system is Light
+            appState.appearanceMode = .dark
+            try assertEqual(appState.theme, "Dark Modern")
+            try assertEqual(appState.effectiveColorScheme, .dark)
             appState.appearanceMode = .auto
+            try assertEqual(appState.theme, "NPad++ Classic")
+            try assertEqual(appState.effectiveColorScheme, .light)
+            try assertFalse(appState.isDarkMode)
+
+            // ...and the reverse: forced Light -> Auto while the system is Dark
+            systemDark = true
+            appState.appearanceMode = .light
+            try assertEqual(appState.effectiveColorScheme, .light)
+            appState.appearanceMode = .auto
+            try assertEqual(appState.theme, "Dark Modern")
+            try assertEqual(appState.effectiveColorScheme, .dark)
+            try assertTrue(appState.isDarkMode)
+
+            // An explicit Light/Dark choice ignores system flips
+            appState.appearanceMode = .light
+            appState.systemAppearanceDidChange()
+            try assertEqual(appState.theme, "NPad++ Classic")
+            try assertEqual(appState.effectiveColorScheme, .light)
+            appState.appearanceMode = .auto
+        }
+
+        runTest("testAutoModeRealignsStaleThemeOnLaunch") {
+            let first = AppStateManager()
+            first.appearanceMode = .auto
+            first.theme = "Monokai"  // stale / mismatched theme left over from earlier use
+
+            let relaunched = AppStateManager()
+            try assertEqual(relaunched.appearanceMode, .auto)
+            try assertEqual(relaunched.theme, AppStateManager.theme(forDark: relaunched.systemIsDark))
+            try assertEqual(relaunched.effectiveColorScheme, relaunched.systemIsDark ? .dark : .light)
+
+            // An explicit Light choice is kept as-is across a relaunch
+            relaunched.appearanceMode = .light
+            let again = AppStateManager()
+            try assertEqual(again.appearanceMode, .light)
+            try assertEqual(again.theme, "NPad++ Classic")
+            again.appearanceMode = .auto
         }
 
         // ==============================================================================

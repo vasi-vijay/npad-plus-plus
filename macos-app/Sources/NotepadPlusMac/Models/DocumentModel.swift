@@ -721,6 +721,7 @@ public class AppStateManager: ObservableObject {
     private let kMarkColor = "npad.markColor"
     private let kLastSystemDark = "npad.lastSystemAppearanceDark"
     private var systemAppearanceObserver: NSObjectProtocol?
+    private var effectiveAppearanceObserver: AnyCancellable?
     public static let kHasCompletedWelcome = "npad.hasCompletedWelcome"
 
     // Session & Recovery Storage Directory
@@ -837,13 +838,25 @@ public class AppStateManager: ObservableObject {
         isDark ? darkDefaultTheme : lightDefaultTheme
     }
 
-    /// The macOS appearance currently in effect, ignoring this app's own override.
-    public var systemIsDark: Bool {
-        // With no override (Auto) the app's effective appearance is the system's; otherwise read the global setting.
-        if appearanceMode == .auto, let app = NSApp {
-            return app.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    /// Reads the macOS light/dark setting directly. The app's own effective appearance can lag behind when the
+    /// override is cleared, so it is not used for this. Replaceable so tests can simulate the system.
+    public var systemDarkProvider: () -> Bool = {
+        UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+    }
+
+    public var systemIsDark: Bool { systemDarkProvider() }
+
+    /// Last system appearance seen; published so SwiftUI re-renders when macOS switches while in Auto.
+    @Published public private(set) var systemDarkSnapshot: Bool = false
+
+    /// The colour scheme the window should use. In Auto this is the system's scheme, stated explicitly:
+    /// `preferredColorScheme(nil)` does not reliably undo an earlier Light/Dark override.
+    public var effectiveColorScheme: ColorScheme {
+        switch appearanceMode {
+        case .light: return .light
+        case .dark: return .dark
+        case .auto: return systemDarkSnapshot ? .dark : .light
         }
-        return UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
     }
 
     @Published public var workspaceRootURL: URL? = nil
@@ -852,6 +865,7 @@ public class AppStateManager: ObservableObject {
     @Published public var appearanceMode: AppAppearanceMode {
         didSet {
             UserDefaults.standard.set(appearanceMode.rawValue, forKey: kAppearanceMode)
+            systemDarkSnapshot = systemIsDark
             applyAppearance()
             // Picking Light/Dark also picks the matching editor theme (the theme can still be changed afterwards).
             // Auto leaves the current theme alone. didSet does not run during init, so a saved theme is preserved.
@@ -1147,12 +1161,13 @@ public class AppStateManager: ObservableObject {
             self.activeMarkColor = MarkPalette.canonical(savedColor)
         }
 
-        // In Auto mode the theme follows the system appearance, including changes made while the app was closed.
+        // In Auto mode the theme always matches the system appearance at launch, so a stale theme (or a system
+        // change made while the app was closed) can never leave a Dark UI with a Light theme or vice versa.
         let nowDark = systemIsDark
-        if appearanceMode == .auto,
-           UserDefaults.standard.object(forKey: kLastSystemDark) as? Bool != nil,
-           UserDefaults.standard.bool(forKey: kLastSystemDark) != nowDark {
-            self.theme = AppStateManager.theme(forDark: nowDark)
+        self.systemDarkSnapshot = nowDark
+        if appearanceMode == .auto {
+            let wanted = AppStateManager.theme(forDark: nowDark)
+            if theme != wanted { self.theme = wanted }
         }
         UserDefaults.standard.set(nowDark, forKey: kLastSystemDark)
         observeSystemAppearanceChanges()
@@ -1177,6 +1192,7 @@ public class AppStateManager: ObservableObject {
 
     public func systemAppearanceDidChange() {
         let dark = systemIsDark
+        systemDarkSnapshot = dark
         UserDefaults.standard.set(dark, forKey: kLastSystemDark)
         guard appearanceMode == .auto else { return }
         let wanted = AppStateManager.theme(forDark: dark)
@@ -1963,13 +1979,19 @@ public class AppStateManager: ObservableObject {
         case .light: return false
         case .dark: return true
         case .auto:
-            let app = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
-            return app == .darkAqua
+            return systemIsDark
         }
     }
 
     public func applyAppearance() {
         guard NSApp != nil else { return }
+        if effectiveAppearanceObserver == nil {
+            // Second, independent signal that macOS flipped light/dark (the distributed notification can arrive early).
+            effectiveAppearanceObserver = NSApp.publisher(for: \.effectiveAppearance)
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.systemAppearanceDidChange() }
+        }
         switch appearanceMode {
         case .auto:
             NSApp.appearance = nil

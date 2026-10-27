@@ -1403,7 +1403,7 @@ public struct MainWindowView: View {
                 EditorStatusBar(appState: appState)
             }
         }
-        .preferredColorScheme(appState.appearanceMode.colorScheme)
+        .preferredColorScheme(appState.effectiveColorScheme)
         // Sheet: Go to Line
         .sheet(isPresented: $appState.showGoToLineSheet) {
             VStack(alignment: .leading, spacing: 10) {
