@@ -1,0 +1,30 @@
+{
+  "id": "comment-wrapper",
+  "name": "Comment Wrapper",
+  "version": "1.0.0",
+  "author": "NPad++ Community",
+  "summary": "Comment out or uncomment code, add block and doc comments, using the syntax of the document's language.",
+  "documentation": "Comment or uncomment the selected lines with the right marker for the document language (// for C-style languages, # for Python/Ruby/Shell/YAML, -- for SQL/Lua, ; for Lisp/INI, % for LaTeX). Block Comment wraps the selection in /* */, <!-- -->, =begin/=end and friends; Doc Comment makes a Javadoc/JSDoc block, a Python docstring or /// lines.",
+  "license": "MIT",
+  "category": "Languages",
+  "icon": "text.bubble",
+  "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/comment-wrapper",
+  "commands": [
+    {
+      "id": "commentLines",
+      "title": "Comment Lines"
+    },
+    {
+      "id": "uncommentLines",
+      "title": "Uncomment Lines"
+    },
+    {
+      "id": "blockComment",
+      "title": "Block Comment"
+    },
+    {
+      "id": "docComment",
+      "title": "Doc Comment"
+    }
+  ]
+}

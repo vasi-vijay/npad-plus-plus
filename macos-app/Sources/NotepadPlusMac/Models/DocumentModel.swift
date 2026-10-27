@@ -521,7 +521,7 @@ public class EditorDocument: ObservableObject, Identifiable {
         let prefix = nsText.substring(with: NSRange(location: 0, length: safeLoc))
         let lines = prefix.components(separatedBy: "\n")
         cursorLine = max(1, lines.count)
-        cursorColumn = (lines.last?.count ?? 0) + 1
+        cursorColumn = ((lines.last ?? "") as NSString).length + 1
     }
 
     /// Records the current content and highlights so a highlight change can be undone with ⌘Z.
@@ -797,7 +797,6 @@ public class AppStateManager: ObservableObject {
     }
 
     // Modal Sheets
-    @Published public var showPluginManagerSheet: Bool = false
     @Published public var showDocumentationSheet: Bool = false
 
     // Sidebar Section Collapsing State (Macro-free)

@@ -1,0 +1,74 @@
+{
+  "id": "json-wrapper",
+  "name": "JSON Wrapper",
+  "version": "1.0.0",
+  "author": "NPad++ Community",
+  "summary": "Embed JSON in source code as a string literal, styled for the document's language (Java, Python, C, C++, C#, JS/TS, Go, Rust, Swift, Kotlin, PHP, Ruby, Shell).",
+  "documentation": "Select JSON (or leave nothing selected for the whole document) and run \"Wrap JSON for Current Language\": the plugin picks the right literal style from the document language - Java text block, Python triple-quoted string, adjacent C string literals, C++ raw string, C# verbatim string, JS template literal, Go/Rust/Swift raw strings, Kotlin raw string, PHP nowdoc, Ruby heredoc or a single-quoted shell string. Use the \"Wrap as...\" commands to choose a language explicitly (handy in a .json file). The text must be valid JSON; \"Minified\" compacts it first.",
+  "license": "MIT",
+  "category": "Languages",
+  "icon": "curlybraces",
+  "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/json-wrapper",
+  "commands": [
+    {
+      "id": "wrapJson",
+      "title": "Wrap JSON for Current Language"
+    },
+    {
+      "id": "wrapJsonMinified",
+      "title": "Wrap Minified JSON for Current Language"
+    },
+    {
+      "id": "as_java",
+      "title": "Wrap as Java"
+    },
+    {
+      "id": "as_python",
+      "title": "Wrap as Python"
+    },
+    {
+      "id": "as_c",
+      "title": "Wrap as C"
+    },
+    {
+      "id": "as_cpp",
+      "title": "Wrap as C++"
+    },
+    {
+      "id": "as_csharp",
+      "title": "Wrap as C#"
+    },
+    {
+      "id": "as_javascript",
+      "title": "Wrap as JavaScript / TypeScript"
+    },
+    {
+      "id": "as_go",
+      "title": "Wrap as Go"
+    },
+    {
+      "id": "as_rust",
+      "title": "Wrap as Rust"
+    },
+    {
+      "id": "as_swift",
+      "title": "Wrap as Swift"
+    },
+    {
+      "id": "as_kotlin",
+      "title": "Wrap as Kotlin"
+    },
+    {
+      "id": "as_php",
+      "title": "Wrap as PHP"
+    },
+    {
+      "id": "as_ruby",
+      "title": "Wrap as Ruby"
+    },
+    {
+      "id": "as_shell",
+      "title": "Wrap as Shell"
+    }
+  ]
+}

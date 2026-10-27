@@ -72,5 +72,11 @@ struct NotepadPlusApp: App {
             PluginCommands(appState: appState)
             HelpCommands(appState: appState)
         }
+
+        Window("Plugin Manager", id: PluginManagerWindow.id) {
+            PluginManagerView(appState: appState)
+                .frame(minWidth: 860, minHeight: 500)
+        }
+        .defaultSize(width: 980, height: 620)
     }
 }

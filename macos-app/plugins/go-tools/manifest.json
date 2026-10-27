@@ -1,0 +1,30 @@
+{
+  "id": "go-tools",
+  "name": "Go Tools",
+  "version": "1.0.0",
+  "author": "NPad++ Community",
+  "summary": "Wrap code in func main(), an error-returning function or a goroutine, and generate structs from fields.",
+  "documentation": "Select statements and wrap them in package main / func main(), a func returning error, or go func() { ... }(). Select lines like \"Name string\" to generate a struct named after the file. Output uses tabs, as gofmt does.",
+  "license": "MIT",
+  "category": "Languages",
+  "icon": "chevron.left.forwardslash.chevron.right",
+  "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/go-tools",
+  "commands": [
+    {
+      "id": "wrapMain",
+      "title": "Wrap in func main()"
+    },
+    {
+      "id": "wrapFunc",
+      "title": "Wrap in Function Returning error"
+    },
+    {
+      "id": "wrapGoroutine",
+      "title": "Wrap in Goroutine"
+    },
+    {
+      "id": "structFromFields",
+      "title": "Generate Struct from Fields"
+    }
+  ]
+}

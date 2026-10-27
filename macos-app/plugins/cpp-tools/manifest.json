@@ -1,0 +1,30 @@
+{
+  "id": "cpp-tools",
+  "name": "C++ Tools",
+  "version": "1.0.0",
+  "author": "NPad++ Community",
+  "summary": "Wrap code in main(), try/catch or a namespace, and generate a class with constructor and getters.",
+  "documentation": "Select statements and wrap them in int main() or try/catch (std::exception). Wrap declarations in a namespace, or turn member lines like \"std::string name;\" into a class with a constructor, const getters and trailing-underscore members.",
+  "license": "MIT",
+  "category": "Languages",
+  "icon": "chevron.left.forwardslash.chevron.right",
+  "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/cpp-tools",
+  "commands": [
+    {
+      "id": "wrapMain",
+      "title": "Wrap in main()"
+    },
+    {
+      "id": "wrapTryCatch",
+      "title": "Wrap in try / catch"
+    },
+    {
+      "id": "wrapNamespace",
+      "title": "Wrap in namespace"
+    },
+    {
+      "id": "classFromFields",
+      "title": "Generate Class from Members"
+    }
+  ]
+}

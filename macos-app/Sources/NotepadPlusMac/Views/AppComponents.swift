@@ -1558,10 +1558,6 @@ public struct MainWindowView: View {
                 NativeWelcomeWindowController.shared.close()
             }
         }
-        // Sheet: Plugin Manager
-        .sheet(isPresented: $appState.showPluginManagerSheet) {
-            PluginManagerView(appState: appState)
-        }
         // Sheet: Documentation & Support
         .sheet(isPresented: $appState.showDocumentationSheet) {
             DocumentationAndSupportView(appState: appState)
@@ -1891,12 +1887,12 @@ public struct EditCommands: Commands {
             Button("Duplicate Line") {
                 appState.duplicateCurrentLine()
             }
-            .keyboardShortcut("d", modifiers: .command)
+            .keyboardShortcut("d", modifiers: [.command, .shift])
 
             Button("Delete Line") {
                 appState.deleteCurrentLine()
             }
-            .keyboardShortcut("k", modifiers: [.command, .shift])
+            .keyboardShortcut("d", modifiers: .command)
 
             Button("Join Lines") {
                 appState.joinLines()
@@ -2294,8 +2290,14 @@ public struct LanguageCommands: Commands {
     }
 }
 
+public enum PluginManagerWindow {
+    public static let id = "plugin-manager"
+}
+
 public struct PluginCommands: Commands {
     @ObservedObject var appState: AppStateManager
+    @ObservedObject private var registry = PluginRegistry.shared
+    @Environment(\.openWindow) private var openWindow
 
     public init(appState: AppStateManager) {
         self.appState = appState
@@ -2304,7 +2306,7 @@ public struct PluginCommands: Commands {
     public var body: some Commands {
         CommandMenu("Plugins") {
             Button("Plugin Manager...") {
-                appState.showPluginManagerSheet = true
+                openWindow(id: PluginManagerWindow.id)
             }
             .keyboardShortcut("p", modifiers: [.command, .shift])
 
@@ -2346,6 +2348,20 @@ public struct PluginCommands: Commands {
                 }
                 Button("Base64 Decode Text") {
                     PluginRegistry.shared.base64Decode(appState: appState)
+                }
+            }
+
+            let community = registry.plugins.filter { $0.source == .community && $0.isInstalled && $0.isEnabled && !$0.commands.isEmpty }
+            if !community.isEmpty {
+                Divider()
+                ForEach(community) { plugin in
+                    Menu(plugin.name) {
+                        ForEach(plugin.commands) { command in
+                            Button(command.title) {
+                                registry.runCommand(pluginID: plugin.id, commandID: command.id, appState: appState)
+                            }
+                        }
+                    }
                 }
             }
         }

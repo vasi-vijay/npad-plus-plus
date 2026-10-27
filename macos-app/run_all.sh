@@ -114,6 +114,7 @@ EOF
         Sources/NotepadPlusMac/Models/SearchEngine.swift \
         Sources/NotepadPlusMac/Models/ProjectExplorerModel.swift \
         Sources/NotepadPlusMac/Models/PluginModel.swift \
+        Sources/NotepadPlusMac/Models/PluginStore.swift \
         Sources/NotepadPlusMac/Editor/SyntaxEngine.swift \
         build/tests/verify_edit_probe.swift \
         -o build/tests/probe_runner 2>/dev/null || true

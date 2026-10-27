@@ -1,0 +1,30 @@
+{
+  "id": "python-tools",
+  "name": "Python Tools",
+  "version": "1.0.0",
+  "author": "NPad++ Community",
+  "summary": "Wrap code in main(), try/except or a function, and turn field lines into a dataclass.",
+  "documentation": "Select statements and wrap them in def main() with the if __name__ guard, a try/except block or a function. Select lines like \"name: str\" or \"count: int = 0\" to generate a @dataclass named after the file.",
+  "license": "MIT",
+  "category": "Languages",
+  "icon": "chevron.left.forwardslash.chevron.right",
+  "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/python-tools",
+  "commands": [
+    {
+      "id": "wrapMain",
+      "title": "Wrap in main() with __main__ Guard"
+    },
+    {
+      "id": "wrapTryExcept",
+      "title": "Wrap in try / except"
+    },
+    {
+      "id": "wrapFunction",
+      "title": "Wrap in Function"
+    },
+    {
+      "id": "dataclass",
+      "title": "Generate Dataclass from Fields"
+    }
+  ]
+}

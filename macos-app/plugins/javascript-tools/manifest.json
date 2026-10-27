@@ -1,0 +1,30 @@
+{
+  "id": "javascript-tools",
+  "name": "JavaScript & TypeScript Tools",
+  "version": "1.0.0",
+  "author": "NPad++ Community",
+  "summary": "Wrap code in an IIFE, async main(), try/catch or a DOMContentLoaded handler.",
+  "documentation": "Select statements and wrap them in a strict-mode IIFE, an async main() entry point with error handling, try/catch, or a DOMContentLoaded listener. Works for JavaScript and TypeScript.",
+  "license": "MIT",
+  "category": "Languages",
+  "icon": "curlybraces.square",
+  "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/javascript-tools",
+  "commands": [
+    {
+      "id": "wrapIife",
+      "title": "Wrap in IIFE"
+    },
+    {
+      "id": "wrapAsyncMain",
+      "title": "Wrap in async main()"
+    },
+    {
+      "id": "wrapTryCatch",
+      "title": "Wrap in try / catch"
+    },
+    {
+      "id": "wrapDomReady",
+      "title": "Wrap in DOMContentLoaded"
+    }
+  ]
+}

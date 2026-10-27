@@ -8,6 +8,7 @@ public enum PluginCategory: String, CaseIterable, Codable, Identifiable {
     case formatters = "Formatters"
     case viewers = "Viewers"
     case utilities = "Utilities"
+    case languages = "Languages"
 
     public var id: String { rawValue }
     public var iconName: String {
@@ -16,6 +17,7 @@ public enum PluginCategory: String, CaseIterable, Codable, Identifiable {
         case .formatters: return "wand.and.stars"
         case .viewers: return "eye.fill"
         case .utilities: return "wrench.and.screwdriver"
+        case .languages: return "chevron.left.forwardslash.chevron.right"
         }
     }
 }
@@ -39,6 +41,12 @@ public enum PluginManagerTab: String, CaseIterable, Identifiable {
 }
 
 // MARK: - Plugin Model
+public enum PluginSource: String {
+    case builtIn
+    /// Open-source JavaScript plugin downloaded from the catalog.
+    case community
+}
+
 public struct PluginInfo: Identifiable, Equatable {
     public let id: String
     public let name: String
@@ -51,6 +59,11 @@ public struct PluginInfo: Identifiable, Equatable {
     public let documentation: String
     public var isInstalled: Bool
     public var isEnabled: Bool
+    public let source: PluginSource
+    public let license: String
+    public let homepage: URL?
+    public let commands: [PluginCommand]
+    public let sha256: String?
 
     public init(
         id: String,
@@ -63,7 +76,12 @@ public struct PluginInfo: Identifiable, Equatable {
         summary: String,
         documentation: String,
         isInstalled: Bool = true,
-        isEnabled: Bool = true
+        isEnabled: Bool = true,
+        source: PluginSource = .builtIn,
+        license: String = "MIT",
+        homepage: URL? = nil,
+        commands: [PluginCommand] = [],
+        sha256: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -76,6 +94,11 @@ public struct PluginInfo: Identifiable, Equatable {
         self.documentation = documentation
         self.isInstalled = isInstalled
         self.isEnabled = isEnabled
+        self.source = source
+        self.license = license
+        self.homepage = homepage
+        self.commands = commands
+        self.sha256 = sha256
     }
 }
 
@@ -85,14 +108,27 @@ public final class PluginRegistry: ObservableObject {
 
     private let kEnabledPlugins = "npad.plugins.enabled"
     private let kInstalledPlugins = "npad.plugins.installed"
+    private let kCatalogURL = "npad.plugins.catalogURL"
+
+    public static let defaultCatalogURL = URL(string: "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/catalog.json")!
 
     @Published public var plugins: [PluginInfo] = []
+    @Published public var isLoadingCatalog = false
+    @Published public var catalogError: String? = nil
+    @Published public var hasLoadedCatalog = false
+    @Published public var busyPluginIDs: Set<String> = []
+    @Published public var lastError: String? = nil
 
-    // Plugin Manager UI State (Macro-free)
-    @Published public var selectedTab: PluginManagerTab = .installed
-    @Published public var selectedCategory: PluginCategory = .all
-    @Published public var searchText: String = ""
-    @Published public var selectedPlugin: PluginInfo? = nil
+    private var builtIns: [PluginInfo] = []
+    private var catalog: [CommunityPluginManifest] = []
+    private var enabledIDs: Set<String> = []
+    private var installedBuiltInIDs: Set<String> = []
+    private let store = PluginStore.shared
+
+    public var catalogURL: URL {
+        if let override = UserDefaults.standard.string(forKey: kCatalogURL), let url = URL(string: override) { return url }
+        return Self.defaultCatalogURL
+    }
 
     public init() {
         loadDefaultPlugins()
@@ -105,6 +141,7 @@ public final class PluginRegistry: ObservableObject {
             "text_sort", "file_compare"
         ]
         let enabledSet = Set(savedEnabled)
+        enabledIDs = enabledSet
 
         let savedInstalled = UserDefaults.standard.stringArray(forKey: kInstalledPlugins) ?? [
             "json_tools", "xml_tools", "markdown_preview",
@@ -112,8 +149,9 @@ public final class PluginRegistry: ObservableObject {
             "text_sort", "file_compare"
         ]
         let installedSet = Set(savedInstalled)
+        installedBuiltInIDs = installedSet
 
-        self.plugins = [
+        self.builtIns = [
             PluginInfo(
                 id: "json_tools",
                 name: "JSON Formatter & Validator",
@@ -142,7 +180,6 @@ public final class PluginRegistry: ObservableObject {
                 icon: "doc.richtext",
                 category: .viewers,
                 version: "1.3.0",
-                availableVersion: "1.3.2",
                 summary: "Render formatted Markdown documents with headings, lists, code blocks, and tables.",
                 documentation: "Provides an interactive live preview of Markdown files side-by-side or in a dedicated sheet.",
                 isInstalled: installedSet.contains("markdown_preview"),
@@ -204,46 +241,180 @@ public final class PluginRegistry: ObservableObject {
                 isEnabled: enabledSet.contains("file_compare")
             )
         ]
+        rebuildPlugins()
     }
 
+    // MARK: - Composition of built-in and community plugins
+    private func rebuildPlugins() {
+        let installedOnDisk = Dictionary(uniqueKeysWithValues: store.installedManifests().map { ($0.id, $0) })
+        let catalogByID = Dictionary(catalog.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+        var result: [PluginInfo] = builtIns.map { info in
+            var copy = info
+            copy.isInstalled = installedBuiltInIDs.contains(info.id)
+            copy.isEnabled = copy.isInstalled && enabledIDs.contains(info.id)
+            return copy
+        }
+
+        let builtInIDs = Set(builtIns.map { $0.id })
+        let communityIDs = Set(installedOnDisk.keys).union(catalogByID.keys).subtracting(builtInIDs)
+        for id in communityIDs.sorted() {
+            let installed = installedOnDisk[id]
+            guard let shown = installed ?? catalogByID[id] else { continue }
+            var newer: String? = nil
+            if let installed = installed, let latest = catalogByID[id],
+               latest.version.compare(installed.version, options: .numeric) == .orderedDescending {
+                newer = latest.version
+            }
+            // The catalog entry carries the checksum of the version on offer, so it wins for an update.
+            let checksumSource = newer != nil ? catalogByID[id] : shown
+            result.append(PluginInfo(
+                id: shown.id,
+                name: shown.name,
+                icon: shown.icon ?? "puzzlepiece.extension",
+                category: PluginCategory(rawValue: shown.category) ?? .utilities,
+                version: shown.version,
+                availableVersion: newer,
+                author: shown.author,
+                summary: shown.summary,
+                documentation: shown.documentation ?? shown.summary,
+                isInstalled: installed != nil,
+                isEnabled: installed != nil && enabledIDs.contains(id),
+                source: .community,
+                license: shown.license,
+                homepage: shown.homepage.flatMap { URL(string: $0) },
+                commands: shown.commands,
+                sha256: checksumSource?.sha256
+            ))
+        }
+        plugins = result
+    }
+
+    // MARK: - Catalog
+    @MainActor
+    public func refreshCatalog() async {
+        guard !isLoadingCatalog else { return }
+        isLoadingCatalog = true
+        catalogError = nil
+        defer { isLoadingCatalog = false }
+        do {
+            catalog = try await store.fetchCatalog(from: catalogURL)
+            hasLoadedCatalog = true
+        } catch {
+            if let store = error as? PluginStoreError, case .downloadFailed(let why) = store, why.contains("404") {
+                catalogError = "The online plugin catalog isn't published yet (HTTP 404). Built-in plugins still work."
+            } else {
+                catalogError = "Could not load the plugin catalog (\(error.localizedDescription)). Installed plugins still work."
+            }
+        }
+        rebuildPlugins()
+    }
+
+    // MARK: - Install / uninstall / enable
     public func isPluginEnabled(_ id: String) -> Bool {
         plugins.first(where: { $0.id == id })?.isEnabled ?? false
     }
 
     public func togglePlugin(_ id: String) {
-        if let idx = plugins.firstIndex(where: { $0.id == id }) {
-            plugins[idx].isEnabled.toggle()
-            saveState()
-        }
+        if enabledIDs.contains(id) { enabledIDs.remove(id) } else { enabledIDs.insert(id) }
+        saveState()
+        rebuildPlugins()
     }
 
-    public func installPlugin(_ id: String) {
-        if let idx = plugins.firstIndex(where: { $0.id == id }) {
-            plugins[idx].isInstalled = true
-            plugins[idx].isEnabled = true
-            saveState()
+    @MainActor
+    public func installPlugin(_ id: String) async {
+        guard let info = plugins.first(where: { $0.id == id }) else { return }
+        if info.source == .builtIn {
+            installedBuiltInIDs.insert(id)
+            enabledIDs.insert(id)
+        } else {
+            guard let entry = catalog.first(where: { $0.id == id }) else {
+                lastError = "\(info.name) is not in the catalog, so it cannot be downloaded."
+                return
+            }
+            busyPluginIDs.insert(id)
+            defer { busyPluginIDs.remove(id) }
+            do {
+                try await store.install(entry, catalogURL: catalogURL)
+                enabledIDs.insert(id)
+            } catch {
+                lastError = "Could not install \(info.name). \(error.localizedDescription)"
+                return
+            }
         }
+        saveState()
+        rebuildPlugins()
     }
 
+    @MainActor
     public func uninstallPlugin(_ id: String) {
-        if let idx = plugins.firstIndex(where: { $0.id == id }) {
-            plugins[idx].isInstalled = false
-            plugins[idx].isEnabled = false
-            saveState()
+        guard let info = plugins.first(where: { $0.id == id }) else { return }
+        if info.source == .builtIn {
+            installedBuiltInIDs.remove(id)
+        } else {
+            do { try store.uninstall(id) } catch {
+                lastError = "Could not remove \(info.name). \(error.localizedDescription)"
+                return
+            }
         }
+        enabledIDs.remove(id)
+        saveState()
+        rebuildPlugins()
     }
 
-    public func updatePlugin(_ id: String) {
-        if plugins.contains(where: { $0.id == id }) {
-            saveState()
-        }
+    @MainActor
+    public func updatePlugin(_ id: String) async {
+        guard let info = plugins.first(where: { $0.id == id }), info.source == .community, info.availableVersion != nil else { return }
+        await installPlugin(id)
     }
 
     private func saveState() {
-        let enabled = plugins.filter { $0.isEnabled }.map { $0.id }
-        let installed = plugins.filter { $0.isInstalled }.map { $0.id }
-        UserDefaults.standard.set(enabled, forKey: kEnabledPlugins)
-        UserDefaults.standard.set(installed, forKey: kInstalledPlugins)
+        UserDefaults.standard.set(Array(enabledIDs).sorted(), forKey: kEnabledPlugins)
+        UserDefaults.standard.set(Array(installedBuiltInIDs).sorted(), forKey: kInstalledPlugins)
+    }
+
+    // MARK: - Running community plugin commands
+    /// Runs a plugin command on the selection (or the whole document when nothing is selected) and applies the result as one undoable edit.
+    public func runCommand(pluginID: String, commandID: String, appState: AppStateManager) {
+        guard let doc = appState.activeDocument, let script = store.script(for: pluginID) else { return }
+        let original = doc.content
+        let text = original as NSString
+        let sel = doc.selectedRange
+        let useSelection = sel.length > 0 && sel.location + sel.length <= text.length
+        let input = useSelection ? text.substring(with: sel) : original
+        let title = plugins.first(where: { $0.id == pluginID })?.commands.first(where: { $0.id == commandID })?.title ?? commandID
+        let fileName = doc.fileURL?.lastPathComponent ?? doc.title
+        let info = ["language": doc.language, "fileName": fileName, "extension": (fileName as NSString).pathExtension.lowercased()]
+
+        Task.detached(priority: .userInitiated) {
+            let outcome = JSPluginRunner.run(script: script, command: commandID, input: input, context: info)
+            await MainActor.run {
+                switch outcome {
+                case .success(let output):
+                    // Ignore the result if the document changed while the plugin ran.
+                    guard doc.content == original else { return }
+                    let newContent: String
+                    let newRange: NSRange
+                    let outLength = (output as NSString).length
+                    if useSelection {
+                        newContent = (original as NSString).replacingCharacters(in: sel, with: output)
+                        newRange = NSRange(location: sel.location, length: outLength)
+                    } else {
+                        newContent = output
+                        newRange = NSRange(location: min(sel.location, outLength), length: 0)
+                    }
+                    doc.applyEdit(newContent, newSelectedRange: newRange, actionName: title)
+                    appState.editorActionSubject.send(.contentReplacedFromUndoRedo)
+                    appState.scheduleSessionSave()
+                case .failure(let error):
+                    let alert = NSAlert()
+                    alert.messageText = "\(title) failed"
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .warning
+                    alert.runModal()
+                }
+            }
+        }
     }
 
     // MARK: - Practical Plugin Actions

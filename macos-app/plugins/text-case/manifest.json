@@ -1,0 +1,20 @@
+{
+  "id": "text-case",
+  "name": "Text Case Converter",
+  "version": "1.0.0",
+  "author": "NPad++ Community",
+  "summary": "Convert text to UPPER, lower, Title, camelCase, snake_case or kebab-case.",
+  "documentation": "Select some text (or leave nothing selected to convert the whole document) and pick a conversion from Plugins > Text Case Converter. camelCase, snake_case and kebab-case are applied line by line.",
+  "license": "MIT",
+  "category": "Formatters",
+  "icon": "textformat",
+  "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/text-case",
+  "commands": [
+    {"id": "upper", "title": "UPPER CASE"},
+    {"id": "lower", "title": "lower case"},
+    {"id": "title", "title": "Title Case"},
+    {"id": "camel", "title": "camelCase"},
+    {"id": "snake", "title": "snake_case"},
+    {"id": "kebab", "title": "kebab-case"}
+  ]
+}

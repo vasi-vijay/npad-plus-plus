@@ -1,0 +1,412 @@
+{
+  "plugins": [
+    {
+      "id": "c-tools",
+      "name": "C Tools",
+      "version": "1.0.0",
+      "author": "NPad++ Community",
+      "summary": "Wrap code in main(), add include guards, extern \"C\" blocks, and typedef structs from fields.",
+      "documentation": "Select statements and wrap them in int main(void). Wrap a header in an include guard derived from the file name, add extern \"C\" for C++ consumers, or turn lines like \"int x;\" into a typedef struct.",
+      "license": "MIT",
+      "category": "Languages",
+      "icon": "chevron.left.forwardslash.chevron.right",
+      "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/c-tools",
+      "commands": [
+        {
+          "id": "wrapMain",
+          "title": "Wrap in main()"
+        },
+        {
+          "id": "includeGuard",
+          "title": "Add Include Guard"
+        },
+        {
+          "id": "externC",
+          "title": "Wrap in extern \"C\""
+        },
+        {
+          "id": "structFromFields",
+          "title": "Generate typedef struct from Fields"
+        }
+      ],
+      "downloadURL": "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/c-tools/main.js",
+      "sha256": "514c238876ac406afa2d3309f5873983e707e2a6cd52eda21021f773145f3e4a"
+    },
+    {
+      "id": "comment-wrapper",
+      "name": "Comment Wrapper",
+      "version": "1.0.0",
+      "author": "NPad++ Community",
+      "summary": "Comment out or uncomment code, add block and doc comments, using the syntax of the document's language.",
+      "documentation": "Comment or uncomment the selected lines with the right marker for the document language (// for C-style languages, # for Python/Ruby/Shell/YAML, -- for SQL/Lua, ; for Lisp/INI, % for LaTeX). Block Comment wraps the selection in /* */, <!-- -->, =begin/=end and friends; Doc Comment makes a Javadoc/JSDoc block, a Python docstring or /// lines.",
+      "license": "MIT",
+      "category": "Languages",
+      "icon": "text.bubble",
+      "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/comment-wrapper",
+      "commands": [
+        {
+          "id": "commentLines",
+          "title": "Comment Lines"
+        },
+        {
+          "id": "uncommentLines",
+          "title": "Uncomment Lines"
+        },
+        {
+          "id": "blockComment",
+          "title": "Block Comment"
+        },
+        {
+          "id": "docComment",
+          "title": "Doc Comment"
+        }
+      ],
+      "downloadURL": "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/comment-wrapper/main.js",
+      "sha256": "6d72dcf8516f9e1023c38a5875249365acb03325f2b609da6de5f4a26592a50e"
+    },
+    {
+      "id": "cpp-tools",
+      "name": "C++ Tools",
+      "version": "1.0.0",
+      "author": "NPad++ Community",
+      "summary": "Wrap code in main(), try/catch or a namespace, and generate a class with constructor and getters.",
+      "documentation": "Select statements and wrap them in int main() or try/catch (std::exception). Wrap declarations in a namespace, or turn member lines like \"std::string name;\" into a class with a constructor, const getters and trailing-underscore members.",
+      "license": "MIT",
+      "category": "Languages",
+      "icon": "chevron.left.forwardslash.chevron.right",
+      "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/cpp-tools",
+      "commands": [
+        {
+          "id": "wrapMain",
+          "title": "Wrap in main()"
+        },
+        {
+          "id": "wrapTryCatch",
+          "title": "Wrap in try / catch"
+        },
+        {
+          "id": "wrapNamespace",
+          "title": "Wrap in namespace"
+        },
+        {
+          "id": "classFromFields",
+          "title": "Generate Class from Members"
+        }
+      ],
+      "downloadURL": "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/cpp-tools/main.js",
+      "sha256": "7221b1bf2b473276dae888c8ba177bd5874846f1243c9b60a86f4abd85adf710"
+    },
+    {
+      "id": "go-tools",
+      "name": "Go Tools",
+      "version": "1.0.0",
+      "author": "NPad++ Community",
+      "summary": "Wrap code in func main(), an error-returning function or a goroutine, and generate structs from fields.",
+      "documentation": "Select statements and wrap them in package main / func main(), a func returning error, or go func() { ... }(). Select lines like \"Name string\" to generate a struct named after the file. Output uses tabs, as gofmt does.",
+      "license": "MIT",
+      "category": "Languages",
+      "icon": "chevron.left.forwardslash.chevron.right",
+      "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/go-tools",
+      "commands": [
+        {
+          "id": "wrapMain",
+          "title": "Wrap in func main()"
+        },
+        {
+          "id": "wrapFunc",
+          "title": "Wrap in Function Returning error"
+        },
+        {
+          "id": "wrapGoroutine",
+          "title": "Wrap in Goroutine"
+        },
+        {
+          "id": "structFromFields",
+          "title": "Generate Struct from Fields"
+        }
+      ],
+      "downloadURL": "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/go-tools/main.js",
+      "sha256": "b23efdd4647c09d51bf5b7544e0f39074e8435b2c745db4c26d0481b282da29a"
+    },
+    {
+      "id": "java-tools",
+      "name": "Java Tools",
+      "version": "1.0.0",
+      "author": "NPad++ Community",
+      "summary": "Wrap code in a main method or try/catch, generate getters/setters and records from fields.",
+      "documentation": "Select statements and wrap them in public static void main or try/catch. Select field declarations such as \"private String name;\" and generate getters and setters (boolean fields get isX, final fields get no setter) or a record. The class or record name comes from the file name.",
+      "license": "MIT",
+      "category": "Languages",
+      "icon": "cup.and.saucer",
+      "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/java-tools",
+      "commands": [
+        {
+          "id": "wrapMain",
+          "title": "Wrap in main Method"
+        },
+        {
+          "id": "wrapTryCatch",
+          "title": "Wrap in try / catch"
+        },
+        {
+          "id": "gettersSetters",
+          "title": "Generate Getters & Setters"
+        },
+        {
+          "id": "record",
+          "title": "Generate Record from Fields"
+        }
+      ],
+      "downloadURL": "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/java-tools/main.js",
+      "sha256": "b657f7a49f22d6dcb68579a01abd55d7ca0e49a89464e22dc2f5adc1709a36de"
+    },
+    {
+      "id": "javascript-tools",
+      "name": "JavaScript & TypeScript Tools",
+      "version": "1.0.0",
+      "author": "NPad++ Community",
+      "summary": "Wrap code in an IIFE, async main(), try/catch or a DOMContentLoaded handler.",
+      "documentation": "Select statements and wrap them in a strict-mode IIFE, an async main() entry point with error handling, try/catch, or a DOMContentLoaded listener. Works for JavaScript and TypeScript.",
+      "license": "MIT",
+      "category": "Languages",
+      "icon": "curlybraces.square",
+      "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/javascript-tools",
+      "commands": [
+        {
+          "id": "wrapIife",
+          "title": "Wrap in IIFE"
+        },
+        {
+          "id": "wrapAsyncMain",
+          "title": "Wrap in async main()"
+        },
+        {
+          "id": "wrapTryCatch",
+          "title": "Wrap in try / catch"
+        },
+        {
+          "id": "wrapDomReady",
+          "title": "Wrap in DOMContentLoaded"
+        }
+      ],
+      "downloadURL": "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/javascript-tools/main.js",
+      "sha256": "82baf623bdd6262ccba5a5af6b9307a07c7eaeb9709c29f87c337f7b7c77862e"
+    },
+    {
+      "id": "json-wrapper",
+      "name": "JSON Wrapper",
+      "version": "1.0.0",
+      "author": "NPad++ Community",
+      "summary": "Embed JSON in source code as a string literal, styled for the document's language (Java, Python, C, C++, C#, JS/TS, Go, Rust, Swift, Kotlin, PHP, Ruby, Shell).",
+      "documentation": "Select JSON (or leave nothing selected for the whole document) and run \"Wrap JSON for Current Language\": the plugin picks the right literal style from the document language - Java text block, Python triple-quoted string, adjacent C string literals, C++ raw string, C# verbatim string, JS template literal, Go/Rust/Swift raw strings, Kotlin raw string, PHP nowdoc, Ruby heredoc or a single-quoted shell string. Use the \"Wrap as...\" commands to choose a language explicitly (handy in a .json file). The text must be valid JSON; \"Minified\" compacts it first.",
+      "license": "MIT",
+      "category": "Languages",
+      "icon": "curlybraces",
+      "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/json-wrapper",
+      "commands": [
+        {
+          "id": "wrapJson",
+          "title": "Wrap JSON for Current Language"
+        },
+        {
+          "id": "wrapJsonMinified",
+          "title": "Wrap Minified JSON for Current Language"
+        },
+        {
+          "id": "as_java",
+          "title": "Wrap as Java"
+        },
+        {
+          "id": "as_python",
+          "title": "Wrap as Python"
+        },
+        {
+          "id": "as_c",
+          "title": "Wrap as C"
+        },
+        {
+          "id": "as_cpp",
+          "title": "Wrap as C++"
+        },
+        {
+          "id": "as_csharp",
+          "title": "Wrap as C#"
+        },
+        {
+          "id": "as_javascript",
+          "title": "Wrap as JavaScript / TypeScript"
+        },
+        {
+          "id": "as_go",
+          "title": "Wrap as Go"
+        },
+        {
+          "id": "as_rust",
+          "title": "Wrap as Rust"
+        },
+        {
+          "id": "as_swift",
+          "title": "Wrap as Swift"
+        },
+        {
+          "id": "as_kotlin",
+          "title": "Wrap as Kotlin"
+        },
+        {
+          "id": "as_php",
+          "title": "Wrap as PHP"
+        },
+        {
+          "id": "as_ruby",
+          "title": "Wrap as Ruby"
+        },
+        {
+          "id": "as_shell",
+          "title": "Wrap as Shell"
+        }
+      ],
+      "downloadURL": "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/json-wrapper/main.js",
+      "sha256": "644ccf1f469f5ba8914e071875f009d9b1d24ea3ca02a3da4903887c82aff860"
+    },
+    {
+      "id": "python-tools",
+      "name": "Python Tools",
+      "version": "1.0.0",
+      "author": "NPad++ Community",
+      "summary": "Wrap code in main(), try/except or a function, and turn field lines into a dataclass.",
+      "documentation": "Select statements and wrap them in def main() with the if __name__ guard, a try/except block or a function. Select lines like \"name: str\" or \"count: int = 0\" to generate a @dataclass named after the file.",
+      "license": "MIT",
+      "category": "Languages",
+      "icon": "chevron.left.forwardslash.chevron.right",
+      "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/python-tools",
+      "commands": [
+        {
+          "id": "wrapMain",
+          "title": "Wrap in main() with __main__ Guard"
+        },
+        {
+          "id": "wrapTryExcept",
+          "title": "Wrap in try / except"
+        },
+        {
+          "id": "wrapFunction",
+          "title": "Wrap in Function"
+        },
+        {
+          "id": "dataclass",
+          "title": "Generate Dataclass from Fields"
+        }
+      ],
+      "downloadURL": "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/python-tools/main.js",
+      "sha256": "49e0153508cb167d346b37da54b34ccabcb846db717c4b9c2716a102c4549229"
+    },
+    {
+      "id": "text-case",
+      "name": "Text Case Converter",
+      "version": "1.0.0",
+      "author": "NPad++ Community",
+      "summary": "Convert text to UPPER, lower, Title, camelCase, snake_case or kebab-case.",
+      "documentation": "Select some text (or leave nothing selected to convert the whole document) and pick a conversion from Plugins > Text Case Converter. camelCase, snake_case and kebab-case are applied line by line.",
+      "license": "MIT",
+      "category": "Formatters",
+      "icon": "textformat",
+      "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/text-case",
+      "commands": [
+        {
+          "id": "upper",
+          "title": "UPPER CASE"
+        },
+        {
+          "id": "lower",
+          "title": "lower case"
+        },
+        {
+          "id": "title",
+          "title": "Title Case"
+        },
+        {
+          "id": "camel",
+          "title": "camelCase"
+        },
+        {
+          "id": "snake",
+          "title": "snake_case"
+        },
+        {
+          "id": "kebab",
+          "title": "kebab-case"
+        }
+      ],
+      "downloadURL": "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/text-case/main.js",
+      "sha256": "fdc51ea8afd83bda8507e15e9cfe2621e94809d2bb89757649e04985e152dc34"
+    },
+    {
+      "id": "web-codec",
+      "name": "URL & HTML Codec",
+      "version": "1.0.0",
+      "author": "NPad++ Community",
+      "summary": "Encode and decode URL components and HTML entities.",
+      "documentation": "Percent-encode or decode URL text, and escape or unescape HTML entities (&amp;, &lt;, &#39;, &#x1F600; and friends) in the selection or the whole document.",
+      "license": "MIT",
+      "category": "Utilities",
+      "icon": "link",
+      "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/web-codec",
+      "commands": [
+        {
+          "id": "urlEncode",
+          "title": "URL Encode"
+        },
+        {
+          "id": "urlDecode",
+          "title": "URL Decode"
+        },
+        {
+          "id": "htmlEscape",
+          "title": "HTML Escape"
+        },
+        {
+          "id": "htmlUnescape",
+          "title": "HTML Unescape"
+        }
+      ],
+      "downloadURL": "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/web-codec/main.js",
+      "sha256": "f6d347b216b216220eeb5deeb997dd3f985347989b956d121f2e77478c973f3b"
+    },
+    {
+      "id": "whitespace-cleaner",
+      "name": "Whitespace Cleaner",
+      "version": "1.0.0",
+      "author": "NPad++ Community",
+      "summary": "Trim trailing spaces, remove or collapse blank lines, and convert tabs to spaces.",
+      "documentation": "Tidy up pasted or generated text. Works on the selection, or on the whole document when nothing is selected.",
+      "license": "MIT",
+      "category": "Utilities",
+      "icon": "text.alignleft",
+      "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/whitespace-cleaner",
+      "commands": [
+        {
+          "id": "trimTrailing",
+          "title": "Trim Trailing Whitespace"
+        },
+        {
+          "id": "trimBoth",
+          "title": "Trim Leading & Trailing Whitespace"
+        },
+        {
+          "id": "removeBlankLines",
+          "title": "Remove Blank Lines"
+        },
+        {
+          "id": "collapseBlankLines",
+          "title": "Collapse Repeated Blank Lines"
+        },
+        {
+          "id": "tabsToSpaces",
+          "title": "Convert Tabs to Spaces"
+        }
+      ],
+      "downloadURL": "https://raw.githubusercontent.com/vasi-vijay/npad-plus-plus/main/macos-app/plugins/whitespace-cleaner/main.js",
+      "sha256": "67969fda4a20717d3e4119fa6116c3c3902b800794ef0e125054f79d44a7c654"
+    }
+  ]
+}

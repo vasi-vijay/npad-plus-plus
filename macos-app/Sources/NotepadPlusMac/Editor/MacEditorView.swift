@@ -351,14 +351,20 @@ public struct MacEditorView: NSViewRepresentable {
         // E. Sync if content was modified externally (file open, tab switch, plugin)
         if !context.coordinator.isUpdating && textView.string != document.content {
             context.coordinator.isUpdating = true
-            let prevSelectedRanges = textView.selectedRanges
             textView.string = document.content
             if let storage = textView.textStorage {
                 SyntaxEngine.highlight(storage: storage, language: document.language, baseFont: font, isDark: isDark)
             }
-            if let first = prevSelectedRanges.first as? NSRange, first.location + first.length <= (textView.string as NSString).length {
-                textView.selectedRanges = prevSelectedRanges
+            // The model's selection is authoritative: edits made through commands (delete/duplicate line, plugins)
+            // set it deliberately, whereas the view's previous selection is stale after the string is replaced.
+            let newLength = (textView.string as NSString).length
+            let wanted = document.selectedRange
+            if wanted.location + wanted.length <= newLength {
+                textView.setSelectedRange(wanted)
+            } else {
+                textView.setSelectedRange(NSRange(location: newLength, length: 0))
             }
+            textView.scrollRangeToVisible(textView.selectedRange())
             context.coordinator.isUpdating = false
             context.coordinator.refreshAllVisualLayers()
             nsView.verticalRulerView?.needsDisplay = true
@@ -769,7 +775,8 @@ public struct MacEditorView: NSViewRepresentable {
             let lines = prefix.components(separatedBy: "\n")
             let newLine = lines.count
             parent.document.cursorLine = newLine
-            parent.document.cursorColumn = (lines.last?.count ?? 0) + 1
+            // UTF-16 length so the column round-trips with characterIndex(forLine:column:) for emoji/accents
+            parent.document.cursorColumn = ((lines.last ?? "") as NSString).length + 1
             parent.document.selectionLength = sel.length
 
             if let clipView = textView.enclosingScrollView?.contentView {

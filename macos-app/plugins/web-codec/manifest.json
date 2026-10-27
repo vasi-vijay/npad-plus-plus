@@ -1,0 +1,18 @@
+{
+  "id": "web-codec",
+  "name": "URL & HTML Codec",
+  "version": "1.0.0",
+  "author": "NPad++ Community",
+  "summary": "Encode and decode URL components and HTML entities.",
+  "documentation": "Percent-encode or decode URL text, and escape or unescape HTML entities (&amp;, &lt;, &#39;, &#x1F600; and friends) in the selection or the whole document.",
+  "license": "MIT",
+  "category": "Utilities",
+  "icon": "link",
+  "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/web-codec",
+  "commands": [
+    {"id": "urlEncode", "title": "URL Encode"},
+    {"id": "urlDecode", "title": "URL Decode"},
+    {"id": "htmlEscape", "title": "HTML Escape"},
+    {"id": "htmlUnescape", "title": "HTML Unescape"}
+  ]
+}

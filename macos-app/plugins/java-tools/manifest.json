@@ -1,0 +1,30 @@
+{
+  "id": "java-tools",
+  "name": "Java Tools",
+  "version": "1.0.0",
+  "author": "NPad++ Community",
+  "summary": "Wrap code in a main method or try/catch, generate getters/setters and records from fields.",
+  "documentation": "Select statements and wrap them in public static void main or try/catch. Select field declarations such as \"private String name;\" and generate getters and setters (boolean fields get isX, final fields get no setter) or a record. The class or record name comes from the file name.",
+  "license": "MIT",
+  "category": "Languages",
+  "icon": "cup.and.saucer",
+  "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/java-tools",
+  "commands": [
+    {
+      "id": "wrapMain",
+      "title": "Wrap in main Method"
+    },
+    {
+      "id": "wrapTryCatch",
+      "title": "Wrap in try / catch"
+    },
+    {
+      "id": "gettersSetters",
+      "title": "Generate Getters & Setters"
+    },
+    {
+      "id": "record",
+      "title": "Generate Record from Fields"
+    }
+  ]
+}

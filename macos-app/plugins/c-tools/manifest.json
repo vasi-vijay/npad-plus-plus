@@ -1,0 +1,30 @@
+{
+  "id": "c-tools",
+  "name": "C Tools",
+  "version": "1.0.0",
+  "author": "NPad++ Community",
+  "summary": "Wrap code in main(), add include guards, extern \"C\" blocks, and typedef structs from fields.",
+  "documentation": "Select statements and wrap them in int main(void). Wrap a header in an include guard derived from the file name, add extern \"C\" for C++ consumers, or turn lines like \"int x;\" into a typedef struct.",
+  "license": "MIT",
+  "category": "Languages",
+  "icon": "chevron.left.forwardslash.chevron.right",
+  "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/c-tools",
+  "commands": [
+    {
+      "id": "wrapMain",
+      "title": "Wrap in main()"
+    },
+    {
+      "id": "includeGuard",
+      "title": "Add Include Guard"
+    },
+    {
+      "id": "externC",
+      "title": "Wrap in extern \"C\""
+    },
+    {
+      "id": "structFromFields",
+      "title": "Generate typedef struct from Fields"
+    }
+  ]
+}

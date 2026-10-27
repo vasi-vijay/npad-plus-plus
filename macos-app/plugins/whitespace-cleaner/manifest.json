@@ -1,0 +1,19 @@
+{
+  "id": "whitespace-cleaner",
+  "name": "Whitespace Cleaner",
+  "version": "1.0.0",
+  "author": "NPad++ Community",
+  "summary": "Trim trailing spaces, remove or collapse blank lines, and convert tabs to spaces.",
+  "documentation": "Tidy up pasted or generated text. Works on the selection, or on the whole document when nothing is selected.",
+  "license": "MIT",
+  "category": "Utilities",
+  "icon": "text.alignleft",
+  "homepage": "https://github.com/vasi-vijay/npad-plus-plus/tree/main/macos-app/plugins/whitespace-cleaner",
+  "commands": [
+    {"id": "trimTrailing", "title": "Trim Trailing Whitespace"},
+    {"id": "trimBoth", "title": "Trim Leading & Trailing Whitespace"},
+    {"id": "removeBlankLines", "title": "Remove Blank Lines"},
+    {"id": "collapseBlankLines", "title": "Collapse Repeated Blank Lines"},
+    {"id": "tabsToSpaces", "title": "Convert Tabs to Spaces"}
+  ]
+}
