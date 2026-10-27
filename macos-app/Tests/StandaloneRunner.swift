@@ -1922,6 +1922,333 @@ struct StandaloneRunner {
         }
 
         // ==============================================================================
+        // Extended file type support
+        // ==============================================================================
+
+        runTest("testExtendedFileTypeDetection") {
+            // Dotfiles have an empty pathExtension in Foundation; they must still be recognised.
+            try assertEqual(SyntaxEngine.detectLanguage(from: ".env"), "Properties")
+            try assertEqual(SyntaxEngine.detectLanguage(from: ".env.local"), "Properties")
+            try assertEqual(SyntaxEngine.detectLanguage(from: ".env.production"), "Properties")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "prod.env"), "Properties")
+            try assertEqual(SyntaxEngine.detectLanguage(from: ".gitignore"), "Ignore")
+            try assertEqual(SyntaxEngine.detectLanguage(from: ".editorconfig"), "INI")
+            try assertEqual(SyntaxEngine.detectLanguage(from: ".zshrc"), "Shell")
+            try assertEqual(SyntaxEngine.detectLanguage(from: ".babelrc"), "JSON")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "Dockerfile"), "Dockerfile")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "Dockerfile.dev"), "Dockerfile")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "Makefile"), "Makefile")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "Jenkinsfile"), "Groovy")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "Cargo.lock"), "TOML")
+
+            // Extensions that previously fell through to Plain Text
+            try assertEqual(SyntaxEngine.detectLanguage(from: "App.jsx"), "JavaScript")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "App.vue"), "HTML")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "data.csv"), "CSV")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "data.tsv"), "CSV")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "main.tf"), "Terraform")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "api.proto"), "Protobuf")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "notebook.ipynb"), "JSON")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "App.csproj"), "XML")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "Cargo.toml"), "TOML")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "notes.txt"), "Plain Text")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "SCRIPT.PY"), "Python")
+
+            // Content sniffing for extensionless files looks at the first line only
+            try assertEqual(SyntaxEngine.detectLanguage(from: "run", content: "#!/usr/bin/env python3\nprint(1)"), "Python")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "run", content: "#!/usr/bin/env -S node --flag\n"), "JavaScript")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "run", content: "#!/usr/bin/ruby\nputs 'flush'"), "Ruby")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "run", content: "#!/bin/zsh\necho hi"), "Shell")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "page", content: "<!DOCTYPE html><html></html>"), "HTML")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "feed", content: "<?xml version=\"1.0\"?><a/>"), "XML")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "header.h", content: "namespace foo {}"), "C++")
+            try assertEqual(SyntaxEngine.detectLanguage(from: "header.h", content: "int add(int a);"), "C")
+        }
+
+        runTest("testFileCodecDecodingAndEncoding") {
+            // UTF-8 BOM is stripped from the text and remembered as the encoding
+            var bomData = Data([0xEF, 0xBB, 0xBF])
+            bomData.append("héllo".data(using: .utf8)!)
+            let utf8BOM = FileCodec.decode(bomData)
+            try assertEqual(utf8BOM.text, "héllo")
+            try assertEqual(utf8BOM.encoding, .utf8BOM)
+
+            // UTF-16 LE / BE
+            let le = try FileCodec.encode("a€b", as: .utf16LE)
+            let leDecoded = FileCodec.decode(le)
+            try assertEqual(leDecoded.text, "a€b")
+            try assertEqual(leDecoded.encoding, .utf16LE)
+            let be = try FileCodec.encode("a€b", as: .utf16BE)
+            let beDecoded = FileCodec.decode(be)
+            try assertEqual(beDecoded.text, "a€b")
+            try assertEqual(beDecoded.encoding, .utf16BE)
+
+            // Legacy Windows-1252 bytes (invalid UTF-8) decode correctly and round-trip byte for byte
+            let legacy = Data([0x63, 0x61, 0x66, 0xE9, 0x20, 0x80])
+            let legacyDecoded = FileCodec.decode(legacy)
+            try assertEqual(legacyDecoded.text, "café €")
+            try assertEqual(legacyDecoded.encoding, .windows1252)
+            let legacyReencoded = try FileCodec.encode(legacyDecoded.text, as: legacyDecoded.encoding)
+            try assertEqual(legacyReencoded, legacy)
+
+            // Plain ASCII/UTF-8 stays UTF-8 with no BOM
+            let plain = FileCodec.decode("KEY=value\n".data(using: .utf8)!)
+            try assertEqual(plain.encoding, .utf8)
+            let plainReencoded = try FileCodec.encode(plain.text, as: .utf8)
+            try assertEqual(plainReencoded, "KEY=value\n".data(using: .utf8)!)
+
+            // Characters that the chosen encoding cannot represent must fail loudly, never corrupt the file
+            var threw = false
+            do { _ = try FileCodec.encode("日本語", as: .ascii) } catch { threw = true }
+            try assertTrue(threw, "Encoding non-ASCII text as ASCII must throw")
+        }
+
+        runTest("testBinaryDetection") {
+            try assertTrue(FileTypeRegistry.looksBinary(Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00])))
+            try assertTrue(FileTypeRegistry.looksBinary(Data(repeating: 0x01, count: 64)))
+            try assertFalse(FileTypeRegistry.looksBinary("def main():\n\tpass\n".data(using: .utf8)!))
+            try assertFalse(FileTypeRegistry.looksBinary(Data()))
+            // UTF-16 text contains NUL bytes but has a BOM, so it is text
+            let utf16Hello = try FileCodec.encode("hello", as: .utf16LE)
+            try assertFalse(FileTypeRegistry.looksBinary(utf16Hello))
+            try assertTrue(FileTypeRegistry.isKnownBinaryExtension(URL(fileURLWithPath: "/tmp/a.PNG")))
+            try assertFalse(FileTypeRegistry.isKnownBinaryExtension(URL(fileURLWithPath: "/tmp/a.py")))
+        }
+
+        runTest("testOpenAndSavePreservesEncodingAndExtensions") {
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("npad-ft-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: dir) }
+
+            let appState = AppStateManager()
+
+            // .env (dotfile) opens with the Properties language
+            let envURL = dir.appendingPathComponent(".env")
+            try "API_KEY=abc\n".write(to: envURL, atomically: true, encoding: .utf8)
+            let envDoc = try appState.openFileFromURL(envURL)
+            try assertEqual(envDoc.language, "Properties")
+
+            // .py opens as Python
+            let pyURL = dir.appendingPathComponent("main.py")
+            try "print('hi')\n".write(to: pyURL, atomically: true, encoding: .utf8)
+            let pyDoc = try appState.openFileFromURL(pyURL)
+            try assertEqual(pyDoc.language, "Python")
+
+            // UTF-16 LE with BOM: edit and save must keep UTF-16 LE + BOM
+            let u16URL = dir.appendingPathComponent("wide.txt")
+            try FileCodec.write("line1\n", to: u16URL, as: .utf16LE)
+            let u16Doc = try appState.openFileFromURL(u16URL)
+            try assertEqual(u16Doc.encoding, .utf16LE)
+            u16Doc.applyEdit("line1\nline2\n")
+            _ = try appState.saveDocument(u16Doc)
+            let savedBytes = try Data(contentsOf: u16URL)
+            try assertEqual(Array(savedBytes.prefix(2)), [0xFF, 0xFE])
+            try assertEqual(FileCodec.decode(savedBytes).text, "line1\nline2\n")
+
+            // Windows-1252 file round-trips byte-for-byte after an edit that does not touch the accented text
+            let legacyURL = dir.appendingPathComponent("legacy.txt")
+            let legacyBytes = Data([0x63, 0x61, 0x66, 0xE9, 0x0A])
+            try legacyBytes.write(to: legacyURL)
+            let legacyDoc = try appState.openFileFromURL(legacyURL)
+            _ = try appState.saveDocument(legacyDoc)
+            let legacySaved = try Data(contentsOf: legacyURL)
+            try assertEqual(legacySaved, legacyBytes)
+        }
+
+        runTest("testConvertLineEndings") {
+            let doc = EditorDocument(title: "a.txt", content: "one\ntwo\r\nthree\rfour")
+            doc.convertLineEndings(to: .crlf)
+            try assertEqual(doc.content, "one\r\ntwo\r\nthree\r\nfour")
+            try assertEqual(doc.lineEnding, .crlf)
+            try assertTrue(doc.isModified)
+            doc.convertLineEndings(to: .lf)
+            try assertEqual(doc.content, "one\ntwo\nthree\nfour")
+            doc.convertLineEndings(to: .cr)
+            try assertEqual(doc.content, "one\rtwo\rthree\rfour")
+        }
+
+        runTest("testCommentDelimitersPerLanguage") {
+            try assertEqual(SyntaxEngine.commentDelimiters(for: "Python").open, "# ")
+            try assertEqual(SyntaxEngine.commentDelimiters(for: "TOML").open, "# ")
+            try assertEqual(SyntaxEngine.commentDelimiters(for: "SQL").open, "-- ")
+            try assertEqual(SyntaxEngine.commentDelimiters(for: "INI").open, "; ")
+            try assertEqual(SyntaxEngine.commentDelimiters(for: "Bash").open, "# ")
+            try assertEqual(SyntaxEngine.commentDelimiters(for: "Java").open, "// ")
+            try assertEqual(SyntaxEngine.commentDelimiters(for: "HTML").close, " -->")
+
+            let appState = AppStateManager()
+            let doc = appState.createNewDocument()
+            doc.language = "HTML"
+            doc.applyEdit("<div></div>")
+            doc.cursorLine = 1
+            appState.toggleComment()
+            try assertEqual(doc.content, "<!-- <div></div> -->")
+            appState.toggleComment()
+            try assertEqual(doc.content, "<div></div>")
+        }
+
+        runTest("testSyntaxHighlightingFixes") {
+            func color(_ language: String, _ text: String, at needle: String) -> NSColor? {
+                let storage = NSTextStorage(string: text)
+                SyntaxEngine.highlight(storage: storage, language: language, baseFont: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular), theme: ThemeManager.npadClassic)
+                let loc = (text as NSString).range(of: needle).location
+                return storage.attribute(.foregroundColor, at: loc, effectiveRange: nil) as? NSColor
+            }
+            let theme = ThemeManager.npadClassic
+
+            // A comment marker inside a string literal is part of the string, not a comment
+            try assertEqual(color("Java", "String u = \"http://a.com\";", at: "//a"), theme.stringColor)
+            try assertEqual(color("Python", "u = \"a # b\"", at: "# b"), theme.stringColor)
+            // An apostrophe inside a comment does not start a string
+            try assertEqual(color("Java", "// don't\nint x = 1;", at: "int"), theme.keywordColor)
+            // Real comments are still comments, and keywords inside comments lose keyword styling
+            try assertEqual(color("Python", "x = 1  # return it", at: "return"), theme.commentColor)
+            // Rust lifetimes are not char literals
+            try assertEqual(color("Rust", "fn f<'a>(x: &'a str) {}", at: "fn"), theme.keywordColor)
+            try assertEqual(color("Rust", "fn f<'a>(x: &'a str) {}", at: "str"), theme.typeColor)
+
+            // Config / data formats now have dedicated rules instead of generic JS keywords
+            try assertEqual(color("YAML", "name: demo\n", at: "name"), theme.keyColor)
+            try assertEqual(color("YAML", "# comment\n", at: "comment"), theme.commentColor)
+            try assertEqual(color("YAML", "function: 1\n", at: "function"), theme.keyColor)
+            try assertEqual(color("Properties", "API_KEY=abc\n", at: "API_KEY"), theme.keyColor)
+            try assertEqual(color("Properties", "# note\nA=1\n", at: "note"), theme.commentColor)
+            try assertEqual(color("TOML", "[server]\nport = 80\n", at: "server"), theme.tagColor)
+            try assertEqual(color("INI", "[core]\nname = x\n", at: "core"), theme.tagColor)
+            try assertEqual(color("Dockerfile", "FROM alpine\n", at: "FROM"), theme.keywordColor)
+            try assertEqual(color("Bash", "if true; then echo; fi", at: "then"), theme.keywordColor)
+
+            // CSV columns alternate colours
+            let first = color("CSV", "a,b,c\n1,2,3\n", at: "a")
+            let second = color("CSV", "a,b,c\n1,2,3\n", at: "b")
+            try assertNotEqual(first ?? NSColor.clear, second ?? NSColor.clear)
+
+            // Unknown-to-keyword-table languages no longer get JS keywords painted over them
+            try assertEqual(color("LaTeX", "\\begin{document} function class", at: "function"), theme.textColor)
+        }
+
+        runTest("testAppearanceSelectsMatchingTheme") {
+            let appState = AppStateManager()
+            appState.appearanceMode = .dark
+            try assertEqual(appState.theme, "Dark Modern")
+            appState.appearanceMode = .light
+            try assertEqual(appState.theme, "NPad++ Classic")
+
+            // A theme chosen by hand afterwards is kept until the appearance setting changes again
+            appState.theme = "Monokai"
+            try assertEqual(appState.theme, "Monokai")
+            appState.appearanceMode = .auto
+            try assertEqual(appState.theme, AppStateManager.theme(forDark: appState.systemIsDark))
+            appState.appearanceMode = .dark
+            try assertEqual(appState.theme, "Dark Modern")
+            appState.appearanceMode = .auto
+        }
+
+        runTest("testFiveColorHighlighting") {
+            try assertEqual(MarkPalette.names, ["Yellow", "Green", "Pink", "Blue", "Orange"])
+            try assertEqual(MarkPalette.canonical("Cyan"), "Blue")  // legacy name from older sessions
+            try assertEqual(MarkPalette.canonical("nonsense"), "Yellow")
+            let doc = EditorDocument(title: "n.txt", content: "hello highlighted world")
+            let range = NSRange(location: 6, length: 11)
+
+            doc.toggleMark(for: range, colorName: "Green")
+            try assertEqual(doc.marks.count, 1)
+            try assertEqual(doc.marks[0].colorName, "Green")
+
+            // Choosing another colour on highlighted text recolours it instead of removing it
+            doc.toggleMark(for: range, colorName: "Pink")
+            try assertEqual(doc.marks.count, 1)
+            try assertEqual(doc.marks[0].colorName, "Pink")
+
+            // Same colour again removes the highlight
+            doc.toggleMark(for: range, colorName: "Pink")
+            try assertTrue(doc.marks.isEmpty)
+
+            // Different words can carry different colours
+            doc.toggleMark(for: NSRange(location: 0, length: 5), colorName: "Yellow")
+            doc.toggleMark(for: NSRange(location: 6, length: 11), colorName: "Blue")
+            try assertEqual(doc.marks.map(\.colorName), ["Yellow", "Blue"])
+            doc.removeMarks(in: NSRange(location: 8, length: 2))
+            try assertEqual(doc.marks.map(\.colorName), ["Yellow"])
+
+            // AppState applies a chosen colour to the selection and remembers it
+            let appState = AppStateManager()
+            let active = appState.createNewDocument()
+            active.applyEdit("abc def")
+            active.selectedRange = NSRange(location: 0, length: 3)
+            appState.markSelection(colorName: "Orange")
+            try assertEqual(appState.activeMarkColor, "Orange")
+            try assertEqual(active.marks.first?.colorName, "Orange")
+            appState.removeMarkFromSelection()
+            try assertTrue(active.marks.isEmpty)
+        }
+
+        runTest("testHighlightUndoRedoAndOverlap") {
+            let doc = EditorDocument(title: "n.txt", content: "one two three four")
+            doc.toggleMark(for: NSRange(location: 0, length: 3), colorName: "Yellow")
+            doc.toggleMark(for: NSRange(location: 4, length: 3), colorName: "Green")
+            try assertEqual(doc.marks.count, 2)
+            try assertEqual(doc.content, "one two three four")  // text is never modified by highlighting
+
+            try assertTrue(doc.undo())
+            try assertEqual(doc.marks.map(\.colorName), ["Yellow"])
+            try assertTrue(doc.redo())
+            try assertEqual(doc.marks.map(\.colorName), ["Yellow", "Green"])
+
+            // Recolouring is undoable too
+            doc.toggleMark(for: NSRange(location: 4, length: 3), colorName: "Orange")
+            try assertEqual(doc.marks.map(\.colorName), ["Yellow", "Orange"])
+            _ = doc.undo()
+            try assertEqual(doc.marks.map(\.colorName), ["Yellow", "Green"])
+
+            // A selection spanning two highlights recolours both; adjacent ranges stay separate
+            doc.toggleMark(for: NSRange(location: 0, length: 7), colorName: "Pink")
+            try assertEqual(doc.marks.map(\.colorName), ["Pink", "Pink"])
+            try assertEqual(doc.marks.count, 2)
+            doc.toggleMark(for: NSRange(location: 0, length: 7), colorName: "Pink")
+            try assertTrue(doc.marks.isEmpty)
+
+            doc.clearAllMarks()  // no-op on empty must not add undo noise
+            try assertFalse(doc.canUndo && doc.marks.count > 0)
+
+            // Typing and highlight undo share one history
+            doc.toggleMark(for: NSRange(location: 0, length: 3), colorName: "Blue")
+            doc.applyEdit("ONE two three four")
+            _ = doc.undo()
+            try assertEqual(doc.content, "one two three four")
+            try assertEqual(doc.marks.count, 1)
+        }
+
+        runTest("testSplitDropZoneGeometry") {
+            try assertEqual(SplitDropZone.zoneWidth(containerWidth: 1000), 500)
+            try assertEqual(SplitDropZone.zoneWidth(containerWidth: -5), 0)
+            try assertFalse(SplitDropZone.isInside(x: 499, containerWidth: 1000))
+            try assertTrue(SplitDropZone.isInside(x: 500, containerWidth: 1000))
+            try assertTrue(SplitDropZone.isInside(x: 999, containerWidth: 1000))
+            try assertFalse(SplitDropZone.isInside(x: -1, containerWidth: 1000), "outside the editor")
+            try assertFalse(SplitDropZone.isInside(x: 1200, containerWidth: 1000), "outside the editor")
+            try assertFalse(SplitDropZone.isInside(x: 10, containerWidth: 0))
+        }
+
+        runTest("testAutoAppearanceFollowsSystemTheme") {
+            let appState = AppStateManager()
+            appState.appearanceMode = .light
+            try assertEqual(appState.theme, "NPad++ Classic")
+            appState.theme = "Monokai"
+            appState.appearanceMode = .auto
+            // Auto maps to the theme matching the system appearance
+            try assertEqual(appState.theme, AppStateManager.theme(forDark: appState.systemIsDark))
+            appState.theme = "GitHub"
+            appState.systemAppearanceDidChange()  // system flipped while in Auto
+            try assertEqual(appState.theme, AppStateManager.theme(forDark: appState.systemIsDark))
+            // Explicit Light/Dark ignore system changes
+            appState.appearanceMode = .dark
+            appState.systemAppearanceDidChange()
+            try assertEqual(appState.theme, "Dark Modern")
+            appState.appearanceMode = .auto
+        }
+
+        // ==============================================================================
         // Summary
         // ==============================================================================
 

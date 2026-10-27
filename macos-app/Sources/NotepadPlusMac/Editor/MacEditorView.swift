@@ -692,18 +692,7 @@ public struct MacEditorView: NSViewRepresentable {
         }
 
         private func markColor(for name: String) -> NSColor {
-            switch name.lowercased() {
-            case "green":
-                return NSColor(calibratedRed: 0.25, green: 0.85, blue: 0.40, alpha: 0.45)
-            case "cyan":
-                return NSColor(calibratedRed: 0.20, green: 0.80, blue: 0.95, alpha: 0.45)
-            case "pink":
-                return NSColor(calibratedRed: 1.0, green: 0.35, blue: 0.65, alpha: 0.45)
-            case "orange":
-                return NSColor(calibratedRed: 1.0, green: 0.60, blue: 0.15, alpha: 0.45)
-            default: // Yellow
-                return NSColor(calibratedRed: 1.0, green: 0.92, blue: 0.20, alpha: 0.45)
-            }
+            MarkPalette.highlight(name)
         }
 
         // Delegate: Provide independent UndoManager per document
@@ -1083,6 +1072,30 @@ public class CodePadTextView: NSTextView {
 
         menu.addItem(NSMenuItem.separator())
 
+        let hasSelection = selectedRange().length > 0
+        let highlightItem = NSMenuItem(title: "Highlight", action: nil, keyEquivalent: "")
+        let highlightMenu = NSMenu(title: "Highlight")
+        highlightMenu.autoenablesItems = false
+        for name in MarkPalette.names {
+            let item = NSMenuItem(title: name, action: #selector(handleContextHighlight(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = name
+            item.image = MarkPalette.swatch(name)
+            item.state = (appState?.activeMarkColor == name) ? .on : .off
+            item.isEnabled = hasSelection
+            highlightMenu.addItem(item)
+        }
+        highlightMenu.addItem(NSMenuItem.separator())
+        let removeHighlightItem = NSMenuItem(title: "Remove Highlight", action: #selector(handleContextRemoveHighlight), keyEquivalent: "")
+        removeHighlightItem.target = self
+        removeHighlightItem.isEnabled = hasSelection
+        highlightMenu.addItem(removeHighlightItem)
+        highlightItem.submenu = highlightMenu
+        highlightItem.isEnabled = hasSelection
+        menu.addItem(highlightItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let encodeItem = NSMenuItem(title: "Base64 Encode", action: #selector(handleContextBase64Encode), keyEquivalent: "")
         encodeItem.target = self
         encodeItem.isEnabled = true
@@ -1166,6 +1179,15 @@ public class CodePadTextView: NSTextView {
 
     @objc private func handleContextFind() {
         appState?.openFindDialog(tab: .find)
+    }
+
+    @objc private func handleContextHighlight(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String else { return }
+        appState?.markSelection(colorName: name)
+    }
+
+    @objc private func handleContextRemoveHighlight() {
+        appState?.removeMarkFromSelection()
     }
 
     @objc private func handleContextReplace() {

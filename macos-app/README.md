@@ -11,7 +11,10 @@ A fast, lightweight, high-productivity developer source-code editor inspired by 
    - Single source-of-truth document synchronization with `NSTextView`
    - Gutter line numbers with flipped coordinates aligned with line heights
    - Independent undo/redo manager per document tab (edits on one tab don't dirty another tab's undo history)
-   - Real-time syntax highlighting for 18+ languages (Java, Swift, Python, JS/TS, C/C++, Rust, Go, XML, JSON, YAML, SQL, Shell, Markdown, etc.)
+   - Real-time syntax highlighting for 60+ languages and formats (Java, Swift, Python, JS/TS/JSX, C/C++, Rust, Go, XML, JSON, YAML, TOML, INI, `.env`, CSV/TSV, Dockerfile, Makefile, Terraform, SQL, Shell, Markdown, etc.)
+   - Dotfile and filename detection (`.env`, `.gitignore`, `.zshrc`, `Dockerfile`, `Makefile`, `Jenkinsfile`, ...) plus first-line shebang detection for extensionless scripts
+   - Strings and comments are tokenised in one pass, so `"http://example.com"` is never mis-coloured as a comment
+   - Language-aware Comment/Uncomment (`#`, `//`, `--`, `;`, `%`, `<!-- -->`, `/* */`)
    - Line editing shortcuts: Duplicate Line (`⌘D`), Delete Line (`⇧⌘K`), Join Lines (`⌘J`), Comment/Uncomment (`⌘/`), Redo (`⌘Y` / `⇧⌘Z`)
 3. **Multi-Tab Find & Replace**:
    - Floating native search dialog with Find, Replace, Find in Files, and Mark tabs
@@ -20,8 +23,9 @@ A fast, lightweight, high-productivity developer source-code editor inspired by 
    - Find in All Opened Documents, Replace in All Opened Documents, and Count
    - Adjustable dialog opacity and transparency behavior
 4. **Encoding & Line Ending Precision**:
-   - Detection and conversion for UTF-8, UTF-8 with BOM, UTF-16LE, UTF-16BE, ASCII
-   - Full support for Unix/macOS (`LF`), Windows (`CRLF`), and Classic Mac (`CR`) line endings
+   - Automatic detection (BOM-aware) for UTF-8, UTF-8 with BOM, UTF-16LE/BE, ASCII, Windows-1252 and ISO-8859-1; files are saved back in their original encoding, and characters the encoding cannot represent raise an error instead of corrupting the file
+   - Full support for Unix/macOS (`LF`), Windows (`CRLF`), and Classic Mac (`CR`) line endings; changing the format converts the document (undoable)
+   - Open multiple files at once, drag in files or folders, and open files from Finder ("Open With" / double-click); binary and very large files prompt before opening
 5. **Developer Toolkit & Extensibility**:
    - **Integrated Terminal**: Execute zsh/bash commands directly in your project directory
    - **Right-Click Open Terminal Here**: Launch terminal in current document folder

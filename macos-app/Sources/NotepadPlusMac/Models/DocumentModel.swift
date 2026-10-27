@@ -24,6 +24,8 @@ public enum DocumentEncoding: String, CaseIterable, Identifiable, Codable {
     case utf16LE = "UTF-16 LE"
     case utf16BE = "UTF-16 BE"
     case ascii = "US-ASCII"
+    case windows1252 = "Windows-1252"
+    case latin1 = "ISO-8859-1"
 
     public var id: String { rawValue }
 }
@@ -68,20 +70,65 @@ public struct TextMark: Identifiable, Codable, Equatable {
     }
 }
 
+/// The five highlight colours offered for text marking.
+public enum MarkPalette {
+    public static let names = ["Yellow", "Green", "Pink", "Blue", "Orange"]
+
+    /// Maps stored names (including the legacy "Cyan") to a palette name.
+    public static func canonical(_ name: String) -> String {
+        let lower = name.lowercased()
+        if lower == "cyan" { return "Blue" }
+        return names.first(where: { $0.lowercased() == lower }) ?? "Yellow"
+    }
+
+    private static func rgb(_ name: String) -> (CGFloat, CGFloat, CGFloat) {
+        switch canonical(name).lowercased() {
+        case "green": return (0.25, 0.85, 0.40)
+        case "blue": return (0.25, 0.60, 1.0)
+        case "pink": return (1.0, 0.35, 0.65)
+        case "orange": return (1.0, 0.60, 0.15)
+        default: return (1.0, 0.92, 0.20)
+        }
+    }
+
+    /// Translucent colour painted behind highlighted text.
+    public static func highlight(_ name: String) -> NSColor {
+        let c = rgb(name)
+        return NSColor(calibratedRed: c.0, green: c.1, blue: c.2, alpha: 0.45)
+    }
+
+    /// Solid colour dot (non-template, so menus keep its colour).
+    public static func swatch(_ name: String, size: CGFloat = 12) -> NSImage {
+        let c = rgb(name)
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            NSColor(calibratedRed: c.0, green: c.1, blue: c.2, alpha: 1).setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            NSColor.black.withAlphaComponent(0.25).setStroke()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).stroke()
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+}
+
 public struct DocumentEditSnapshot: Equatable {
     public let content: String
     public let selectedRange: NSRange
     public let cursorLine: Int
     public let cursorColumn: Int
     public let actionName: String
+    public let marks: [TextMark]
 
     public init(
         content: String,
         selectedRange: NSRange,
         cursorLine: Int,
         cursorColumn: Int,
-        actionName: String = "Edit"
+        actionName: String = "Edit",
+        marks: [TextMark] = []
     ) {
+        self.marks = marks
         self.content = content
         self.selectedRange = selectedRange
         self.cursorLine = cursorLine
@@ -315,6 +362,18 @@ public class EditorDocument: ObservableObject, Identifiable {
     }
 
     /// Applies an edit and records it on this document's isolated undo stack.
+    /// Converts every line break in the document to `format` (undoable) and records it as the save format.
+    public func convertLineEndings(to format: LineEndingFormat) {
+        let normalized = content
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let converted = format == .lf ? normalized : normalized.replacingOccurrences(of: "\n", with: format.newlineSequence)
+        lineEnding = format
+        let clamped = NSRange(location: min(selectedRange.location, (converted as NSString).length), length: 0)
+        applyEdit(converted, newSelectedRange: clamped, actionName: "Convert Line Endings")
+        isModified = true
+    }
+
     public func applyEdit(
         _ newContent: String,
         newSelectedRange: NSRange? = nil,
@@ -330,7 +389,8 @@ public class EditorDocument: ObservableObject, Identifiable {
             selectedRange: selectedRange,
             cursorLine: cursorLine,
             cursorColumn: cursorColumn,
-            actionName: actionName
+            actionName: actionName,
+            marks: marks
         )
         undoStack.append(prevSnapshot)
         if undoStack.count > 250 {
@@ -372,10 +432,12 @@ public class EditorDocument: ObservableObject, Identifiable {
             selectedRange: selectedRange,
             cursorLine: cursorLine,
             cursorColumn: cursorColumn,
-            actionName: targetSnapshot.actionName
+            actionName: targetSnapshot.actionName,
+            marks: marks
         )
         redoStack.append(currentSnapshot)
 
+        marks = targetSnapshot.marks
         content = targetSnapshot.content
         selectedRange = targetSnapshot.selectedRange
         selectionLength = targetSnapshot.selectedRange.length
@@ -399,10 +461,12 @@ public class EditorDocument: ObservableObject, Identifiable {
             selectedRange: selectedRange,
             cursorLine: cursorLine,
             cursorColumn: cursorColumn,
-            actionName: targetSnapshot.actionName
+            actionName: targetSnapshot.actionName,
+            marks: marks
         )
         undoStack.append(currentSnapshot)
 
+        marks = targetSnapshot.marks
         content = targetSnapshot.content
         selectedRange = targetSnapshot.selectedRange
         selectionLength = targetSnapshot.selectedRange.length
@@ -435,7 +499,7 @@ public class EditorDocument: ObservableObject, Identifiable {
         guard let targetURL = url ?? fileURL else {
             throw NSError(domain: "NPad", code: 404, userInfo: [NSLocalizedDescriptionKey: "No target URL for save"])
         }
-        try content.write(to: targetURL, atomically: true, encoding: .utf8)
+        try FileCodec.write(content, to: targetURL, as: encoding)
         markAsSaved(at: targetURL)
     }
 
@@ -460,19 +524,46 @@ public class EditorDocument: ObservableObject, Identifiable {
         cursorColumn = (lines.last?.count ?? 0) + 1
     }
 
+    /// Records the current content and highlights so a highlight change can be undone with ⌘Z.
+    public func recordMarkUndo(_ actionName: String) {
+        undoStack.append(DocumentEditSnapshot(
+            content: content,
+            selectedRange: selectedRange,
+            cursorLine: cursorLine,
+            cursorColumn: cursorColumn,
+            actionName: actionName,
+            marks: marks
+        ))
+        if undoStack.count > 250 { undoStack.removeFirst() }
+        redoStack.removeAll()
+        updateUndoRedoState()
+    }
+
+    /// Highlights `range` in `colorName`. Selecting highlighted text in a different colour recolours it;
+    /// selecting it in the same colour removes the highlight. Undoable.
     public func toggleMark(for range: NSRange, colorName: String = "Yellow") {
         guard range.length > 0 else { return }
 
-        if let idx = marks.firstIndex(where: {
-            NSIntersectionRange($0.range, range).length > 0
-        }) {
-            marks.remove(at: idx)
-        } else {
+        let overlapping = marks.indices.filter { NSIntersectionRange(marks[$0].range, range).length > 0 }
+        recordMarkUndo("Highlight")
+        if overlapping.isEmpty {
             marks.append(TextMark(range: range, colorName: colorName))
+        } else if overlapping.allSatisfy({ marks[$0].colorName == colorName }) {
+            for index in overlapping.reversed() { marks.remove(at: index) }
+        } else {
+            for index in overlapping { marks[index].colorName = colorName }
         }
     }
 
+    public func removeMarks(in range: NSRange) {
+        guard marks.contains(where: { NSIntersectionRange($0.range, range).length > 0 }) else { return }
+        recordMarkUndo("Remove Highlight")
+        marks.removeAll { NSIntersectionRange($0.range, range).length > 0 }
+    }
+
     public func clearAllMarks() {
+        guard !marks.isEmpty else { return }
+        recordMarkUndo("Clear Highlights")
         marks.removeAll()
     }
 
@@ -627,6 +718,9 @@ public class AppStateManager: ObservableObject {
     private let kFontSize = "npad.fontSize"
     private let kAppearanceMode = "npad.appearanceMode"
     private let kTheme = "npad.theme"
+    private let kMarkColor = "npad.markColor"
+    private let kLastSystemDark = "npad.lastSystemAppearanceDark"
+    private var systemAppearanceObserver: NSObjectProtocol?
     public static let kHasCompletedWelcome = "npad.hasCompletedWelcome"
 
     // Session & Recovery Storage Directory
@@ -736,6 +830,22 @@ public class AppStateManager: ObservableObject {
     public static let authorTag: String = "Made By Vijay"
     public static let authorInstagramURL: String = "https://www.instagram.com/made.by.vijay"
 
+    public static let lightDefaultTheme = "NPad++ Classic"
+    public static let darkDefaultTheme = "Dark Modern"
+
+    public static func theme(forDark isDark: Bool) -> String {
+        isDark ? darkDefaultTheme : lightDefaultTheme
+    }
+
+    /// The macOS appearance currently in effect, ignoring this app's own override.
+    public var systemIsDark: Bool {
+        // With no override (Auto) the app's effective appearance is the system's; otherwise read the global setting.
+        if appearanceMode == .auto, let app = NSApp {
+            return app.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
+        return UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+    }
+
     @Published public var workspaceRootURL: URL? = nil
 
     // Appearance & Theme
@@ -743,6 +853,19 @@ public class AppStateManager: ObservableObject {
         didSet {
             UserDefaults.standard.set(appearanceMode.rawValue, forKey: kAppearanceMode)
             applyAppearance()
+            // Picking Light/Dark also picks the matching editor theme (the theme can still be changed afterwards).
+            // Auto leaves the current theme alone. didSet does not run during init, so a saved theme is preserved.
+            switch appearanceMode {
+            case .light where theme != AppStateManager.lightDefaultTheme:
+                theme = AppStateManager.lightDefaultTheme
+            case .dark where theme != AppStateManager.darkDefaultTheme:
+                theme = AppStateManager.darkDefaultTheme
+            case .auto:
+                let wanted = AppStateManager.theme(forDark: systemIsDark)
+                if theme != wanted { theme = wanted }
+            default:
+                break
+            }
             editorActionSubject.send(.themeChanged)
         }
     }
@@ -773,7 +896,15 @@ public class AppStateManager: ObservableObject {
     @Published public var wordWrap: Bool = false
 
     // Text Marking Preferences
-    @Published public var activeMarkColor: String = "Yellow"
+    @Published public var activeMarkColor: String = "Yellow" {
+        didSet {
+            let canonical = MarkPalette.canonical(activeMarkColor)
+            if canonical != activeMarkColor {
+                activeMarkColor = canonical  // assignments inside didSet do not re-trigger it
+            }
+            UserDefaults.standard.set(canonical, forKey: kMarkColor)
+        }
+    }
 
     // Sheets & Dialogs
     @Published public var showGoToLineSheet: Bool = false
@@ -854,7 +985,7 @@ public class AppStateManager: ObservableObject {
             selectedProjectItemURL = url
             return
         }
-        _ = try? openFileFromURL(url)
+        openFileInteractively(url)
         selectedProjectItemURL = url
     }
 
@@ -1012,11 +1143,45 @@ public class AppStateManager: ObservableObject {
 
         applyAppearance()
 
+        if let savedColor = UserDefaults.standard.string(forKey: kMarkColor) {
+            self.activeMarkColor = MarkPalette.canonical(savedColor)
+        }
+
+        // In Auto mode the theme follows the system appearance, including changes made while the app was closed.
+        let nowDark = systemIsDark
+        if appearanceMode == .auto,
+           UserDefaults.standard.object(forKey: kLastSystemDark) as? Bool != nil,
+           UserDefaults.standard.bool(forKey: kLastSystemDark) != nowDark {
+            self.theme = AppStateManager.theme(forDark: nowDark)
+        }
+        UserDefaults.standard.set(nowDark, forKey: kLastSystemDark)
+        observeSystemAppearanceChanges()
+
         // First-launch welcome experience:
         // Automatically display on first launch for a new user if not restoring an existing session
         if !hasCompletedWelcome && !sessionRestored {
             self.showWelcomeSheet = true
         }
+    }
+
+    private func observeSystemAppearanceChanges() {
+        systemAppearanceObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // The effective appearance updates just after the notification is posted.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self?.systemAppearanceDidChange() }
+        }
+    }
+
+    public func systemAppearanceDidChange() {
+        let dark = systemIsDark
+        UserDefaults.standard.set(dark, forKey: kLastSystemDark)
+        guard appearanceMode == .auto else { return }
+        let wanted = AppStateManager.theme(forDark: dark)
+        if theme != wanted { theme = wanted }
+        editorActionSubject.send(.themeChanged)
     }
 
     // MARK: - Session Persistence & Recovery (Priority 1)
@@ -1292,20 +1457,9 @@ public class AppStateManager: ObservableObject {
         }
 
         let data = try Data(contentsOf: url)
-        var loadedText: String = ""
-        var detectedEncoding: DocumentEncoding = .utf8
-        if let str = String(data: data, encoding: .utf8) {
-            loadedText = str
-            detectedEncoding = .utf8
-        } else if let str = String(data: data, encoding: .utf16) {
-            loadedText = str
-            detectedEncoding = .utf16LE
-        } else if let str = String(data: data, encoding: .isoLatin1) {
-            loadedText = str
-            detectedEncoding = .ascii
-        } else {
-            loadedText = String(decoding: data, as: UTF8.self)
-        }
+        let decoded = FileCodec.decode(data)
+        let loadedText = decoded.text
+        let detectedEncoding = decoded.encoding
 
         let ending: LineEndingFormat
         if loadedText.contains("\r\n") {
@@ -1358,7 +1512,7 @@ public class AppStateManager: ObservableObject {
         guard let url = targetURL ?? doc.fileURL else {
             return false
         }
-        try doc.content.write(to: url, atomically: true, encoding: .utf8)
+        try FileCodec.write(doc.content, to: url, as: doc.encoding)
         doc.markAsSaved(at: url)
         doc.language = SyntaxEngine.detectLanguage(from: url.lastPathComponent, content: doc.content)
         self.objectWillChange.send()
@@ -1516,6 +1670,7 @@ public class AppStateManager: ObservableObject {
         guard let doc = activeDocument else { return }
         doc.undo()
         editorActionSubject.send(.contentReplacedFromUndoRedo)
+        editorActionSubject.send(.marksChanged)
         scheduleSessionSave()
     }
 
@@ -1523,6 +1678,7 @@ public class AppStateManager: ObservableObject {
         guard let doc = activeDocument else { return }
         doc.redo()
         editorActionSubject.send(.contentReplacedFromUndoRedo)
+        editorActionSubject.send(.marksChanged)
         scheduleSessionSave()
     }
 
@@ -1868,9 +2024,18 @@ public class AppStateManager: ObservableObject {
     }
 
     // MARK: - Persistent Text Marking
-    public func markSelection() {
+    /// Highlights the selection. When `colorName` is given it also becomes the active highlight colour.
+    public func markSelection(colorName: String? = nil) {
+        if let colorName = colorName { activeMarkColor = colorName }
         guard let doc = activeDocument, doc.selectedRange.length > 0 else { return }
         doc.toggleMark(for: doc.selectedRange, colorName: activeMarkColor)
+        editorActionSubject.send(.marksChanged)
+        scheduleSessionSave()
+    }
+
+    public func removeMarkFromSelection() {
+        guard let doc = activeDocument, doc.selectedRange.length > 0 else { return }
+        doc.removeMarks(in: doc.selectedRange)
         editorActionSubject.send(.marksChanged)
         scheduleSessionSave()
     }
@@ -2197,6 +2362,7 @@ public class AppStateManager: ObservableObject {
 
     public func markAll() {
         guard let doc = activeDocument, !searchQuery.isEmpty else { return }
+        doc.recordMarkUndo("Mark All")
         if markPurgeForSearch {
             doc.marks.removeAll()
         }
@@ -2331,25 +2497,27 @@ public class AppStateManager: ObservableObject {
         let targetIdx = max(0, min(doc.cursorLine - 1, lines.count - 1))
         let savedLine = doc.cursorLine
         let savedCol = doc.cursorColumn
-        let line = lines[targetIdx]
-        let prefix = (doc.language == "Python" || doc.language == "Shell" || doc.language == "Properties" || doc.language == "YAML") ? "# " : "// "
+        let rawLine = lines[targetIdx]
+        let carriageReturn = rawLine.hasSuffix("\r") ? "\r" : ""
+        let line = carriageReturn.isEmpty ? rawLine : String(rawLine.dropLast())
+        let (prefix, suffix) = SyntaxEngine.commentDelimiters(for: doc.language)
         let trimmedPrefix = prefix.trimmingCharacters(in: .whitespaces)
+        let trimmedSuffix = suffix?.trimmingCharacters(in: .whitespaces)
 
         let trimmedLine = line.trimmingCharacters(in: .whitespaces)
-        if trimmedLine.hasPrefix(prefix) {
-            if let range = line.range(of: prefix) {
-                var modified = line
+        let isCommented = trimmedLine.hasPrefix(trimmedPrefix) && (trimmedSuffix.map { trimmedLine.hasSuffix($0) } ?? true)
+        if isCommented {
+            var modified = line
+            if let range = modified.range(of: prefix) ?? modified.range(of: trimmedPrefix) {
                 modified.removeSubrange(range)
-                lines[targetIdx] = modified
             }
-        } else if trimmedLine.hasPrefix(trimmedPrefix) {
-            if let range = line.range(of: trimmedPrefix) {
-                var modified = line
+            if let closeMark = suffix, let range = modified.range(of: closeMark, options: .backwards)
+                ?? modified.range(of: trimmedSuffix ?? closeMark, options: .backwards) {
                 modified.removeSubrange(range)
-                lines[targetIdx] = modified
             }
+            lines[targetIdx] = modified + carriageReturn
         } else {
-            lines[targetIdx] = prefix + line
+            lines[targetIdx] = prefix + line + (suffix ?? "") + carriageReturn
         }
         let newContent = lines.joined(separator: "\n")
         let newLoc = doc.characterIndex(forLine: savedLine, column: savedCol, in: newContent)
@@ -2596,6 +2764,7 @@ public class AppStateManager: ObservableObject {
 
     @discardableResult
     public func openFileInPane(url: URL, pane: EditorPaneSide) -> EditorDocument? {
+        guard confirmOpenable(url) else { return nil }
         do {
             let doc = try openFileFromURL(url)
             if isSplitViewActive {
@@ -2627,6 +2796,7 @@ public class AppStateManager: ObservableObject {
             scheduleSessionSave()
             return doc
         } catch {
+            presentOpenError(error, for: url)
             return nil
         }
     }

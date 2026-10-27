@@ -248,23 +248,23 @@ public final class SyntaxEngine {
     public static let alphabeticalGroups: [LanguageAlphabetGroup] = [
         LanguageAlphabetGroup(letter: "A", languages: ["ActionScript", "Ada", "Assembly", "AutoIt"]),
         LanguageAlphabetGroup(letter: "B", languages: ["Bash", "Batch"]),
-        LanguageAlphabetGroup(letter: "C", languages: ["C", "C#", "C++", "CMake", "CSS", "CoffeeScript"]),
+        LanguageAlphabetGroup(letter: "C", languages: ["C", "C#", "C++", "CMake", "CSS", "CSV", "CoffeeScript"]),
         LanguageAlphabetGroup(letter: "D", languages: ["D", "Dart", "Diff", "Dockerfile"]),
         LanguageAlphabetGroup(letter: "E", languages: ["Elixir", "Erlang"]),
         LanguageAlphabetGroup(letter: "F", languages: ["F#", "Fortran"]),
         LanguageAlphabetGroup(letter: "G", languages: ["Go", "Gradle", "GraphQL", "Groovy"]),
         LanguageAlphabetGroup(letter: "H", languages: ["Haskell", "HTML"]),
-        LanguageAlphabetGroup(letter: "I", languages: ["INI"]),
+        LanguageAlphabetGroup(letter: "I", languages: ["Ignore", "INI"]),
         LanguageAlphabetGroup(letter: "J", languages: ["Java", "JavaScript", "JSON", "Julia"]),
         LanguageAlphabetGroup(letter: "K", languages: ["Kotlin"]),
         LanguageAlphabetGroup(letter: "L", languages: ["LaTeX", "Lisp", "Log", "Lua"]),
         LanguageAlphabetGroup(letter: "M", languages: ["Makefile", "Markdown", "MATLAB"]),
         LanguageAlphabetGroup(letter: "N", languages: ["Nim"]),
         LanguageAlphabetGroup(letter: "O", languages: ["Objective-C", "OCaml"]),
-        LanguageAlphabetGroup(letter: "P", languages: ["Pascal", "Perl", "PHP", "PowerShell", "Properties", "Python"]),
+        LanguageAlphabetGroup(letter: "P", languages: ["Pascal", "Perl", "PHP", "PowerShell", "Properties", "Protobuf", "Python"]),
         LanguageAlphabetGroup(letter: "R", languages: ["R", "Ruby", "Rust"]),
         LanguageAlphabetGroup(letter: "S", languages: ["Sass", "Scala", "Shell", "SQL", "Swift"]),
-        LanguageAlphabetGroup(letter: "T", languages: ["TCL", "TeX", "TOML", "TypeScript"]),
+        LanguageAlphabetGroup(letter: "T", languages: ["TCL", "Terraform", "TeX", "TOML", "TypeScript"]),
         LanguageAlphabetGroup(letter: "V", languages: ["Verilog", "VHDL", "Visual Basic"]),
         LanguageAlphabetGroup(letter: "X", languages: ["XML"]),
         LanguageAlphabetGroup(letter: "Y", languages: ["YAML"]),
@@ -282,100 +282,43 @@ public final class SyntaxEngine {
 
     // MARK: - Language Detection
     public static func detectLanguage(from filename: String, content: String = "") -> String {
-        let lowerName = filename.lowercased()
-        let ext = (filename as NSString).pathExtension.lowercased()
+        FileTypeRegistry.language(forFilename: filename, content: content)
+    }
 
-        // 1. Exact filename matches
-        switch lowerName {
-        case "pom.xml": return "XML"
-        case "build.gradle", "settings.gradle": return "Gradle"
-        case "build.gradle.kts", "settings.gradle.kts": return "Gradle"
-        case "cmakelists.txt": return "CMake"
-        case "gemfile", "rakefile": return "Ruby"
-        case "dockerfile": return "Dockerfile"
-        case "makefile", "gnumakefile": return "Makefile"
-        case ".bashrc", ".zshrc", ".profile", ".bash_profile": return "Shell"
-        default: break
-        }
-
-        // 2. Extension matches
-        switch ext {
-        case "java": return "Java"
-        case "swift": return "Swift"
-        case "kt", "kts": return "Kotlin"
-        case "js", "mjs", "cjs": return "JavaScript"
-        case "ts", "tsx": return "TypeScript"
-        case "py", "pyw", "pyi": return "Python"
-        case "c", "h": return "C"
-        case "cpp", "hpp", "cc", "cxx", "c++", "hh": return "C++"
-        case "cs": return "C#"
-        case "go": return "Go"
-        case "rs": return "Rust"
-        case "html", "htm", "xhtml": return "HTML"
-        case "css": return "CSS"
-        case "scss", "sass", "less": return "Sass"
-        case "xml", "plist", "svg", "xsd", "wsdl": return "XML"
-        case "json", "json5", "jsonc": return "JSON"
-        case "yaml", "yml": return "YAML"
-        case "sql": return "SQL"
-        case "sh", "bash", "zsh", "command": return "Shell"
-        case "bat", "cmd": return "Batch"
-        case "md", "markdown", "mdown": return "Markdown"
-        case "properties", "env", "conf": return "Properties"
-        case "ini", "cfg": return "INI"
-        case "log": return "Log"
-        case "gradle": return "Gradle"
-        case "rb", "ruby": return "Ruby"
-        case "php", "phtml": return "PHP"
-        case "dart": return "Dart"
-        case "lua": return "Lua"
-        case "pl", "pm": return "Perl"
-        case "ps1", "psm1": return "PowerShell"
-        case "r", "rmd": return "R"
-        case "jl": return "Julia"
-        case "zig": return "Zig"
-        case "scala", "sc": return "Scala"
-        case "ex", "exs": return "Elixir"
-        case "erl", "hrl": return "Erlang"
-        case "hs", "lhs": return "Haskell"
-        case "toml": return "TOML"
-        case "tex", "latex", "sty": return "LaTeX"
-        case "cmake": return "CMake"
-        case "diff", "patch": return "Diff"
-        case "v", "sv": return "Verilog"
-        case "vhd", "vhdl": return "VHDL"
-        case "vb", "vbs": return "Visual Basic"
-        case "nim": return "Nim"
-        case "as": return "ActionScript"
-        case "ada", "adb", "ads": return "Ada"
-        case "asm", "s": return "Assembly"
-        case "au3": return "AutoIt"
-        case "f", "f90", "f95": return "Fortran"
-        case "fs", "fsi", "fsx": return "F#"
-        case "groovy", "gvy": return "Groovy"
-        case "graphql", "gql": return "GraphQL"
-        case "lisp", "lsp", "cl": return "Lisp"
-        case "ml", "mli": return "OCaml"
-        case "pas", "pp": return "Pascal"
-        case "tcl": return "TCL"
-        case "coffee": return "CoffeeScript"
-        case "m":
-            if content.contains("#import") || content.contains("@interface") || content.contains("@implementation") {
-                return "Objective-C"
-            }
-            return "MATLAB"
-        case "mm": return "Objective-C"
+    /// Comment syntax used by Toggle Comment. `close` is nil for languages with line comments.
+    public static func commentDelimiters(for language: String) -> (open: String, close: String?) {
+        switch canonicalLanguage(language) {
+        case "python", "shell", "properties", "yaml", "toml", "ruby", "perl", "powershell", "r", "julia",
+             "elixir", "dockerfile", "makefile", "cmake", "ignore", "terraform", "nim", "coffeescript", "csv":
+            return ("# ", nil)
+        case "ini", "lisp", "assembly", "autoit":
+            return ("; ", nil)
+        case "sql", "lua", "haskell", "ada", "vhdl":
+            return ("-- ", nil)
+        case "latex", "erlang", "matlab":
+            return ("% ", nil)
+        case "batch":
+            return ("REM ", nil)
+        case "visual basic":
+            return ("' ", nil)
+        case "html", "xml":
+            return ("<!-- ", " -->")
+        case "css":
+            return ("/* ", " */")
         default:
-            // Check shebang in first line if no extension
-            if content.hasPrefix("#!") {
-                if content.contains("python") { return "Python" }
-                if content.contains("bash") || content.contains("sh") || content.contains("zsh") { return "Shell" }
-                if content.contains("node") { return "JavaScript" }
-                if content.contains("ruby") { return "Ruby" }
-                if content.contains("perl") { return "Perl" }
-                if content.contains("php") { return "PHP" }
-            }
-            return "Plain Text"
+            return ("// ", nil)
+        }
+    }
+
+    /// Normalises user-facing language names (menu entries, aliases) to the key the highlighter uses.
+    static func canonicalLanguage(_ language: String) -> String {
+        let lang = language.lowercased()
+        switch lang {
+        case "bash": return "shell"
+        case "tex": return "latex"
+        case "yml": return "yaml"
+        case "vb": return "visual basic"
+        default: return lang
         }
     }
 
@@ -457,7 +400,7 @@ public final class SyntaxEngine {
             .foregroundColor: defaultTextColor
         ], range: fullRange)
 
-        let lang = language.lowercased()
+        let lang = canonicalLanguage(language)
         if lang == "plain text" || length > 150_000 || !syntaxEnabled {
             storage.endEditing()
             return
@@ -487,6 +430,47 @@ public final class SyntaxEngine {
             }
         }
 
+        // Single left-to-right pass over strings and comments so that a comment marker inside a string
+        // (e.g. "http://host") or a quote inside a comment is never mis-coloured.
+        // Patterns passed in must use non-capturing groups: each alternative is exactly one capture group.
+        func applyLiteralsAndComments(
+            lineComment: String?,
+            block: Bool = false,
+            triple: Bool = false,
+            singleQuote: SingleQuoteMode = .string,
+            backtick: Bool = false,
+            colorStrings: Bool = true
+        ) {
+            var alternatives: [(pattern: String, isComment: Bool)] = []
+            if block { alternatives.append(("/\\*[\\s\\S]*?(?:\\*/|\\z)", true)) }
+            if triple { alternatives.append(("\"\"\"[\\s\\S]*?(?:\"\"\"|\\z)|'''[\\s\\S]*?(?:'''|\\z)", false)) }
+            if let line = lineComment { alternatives.append((line, true)) }
+            alternatives.append(("\"(?:\\\\.|[^\"\\\\\\n])*\"", false))
+            switch singleQuote {
+            case .string: alternatives.append(("'(?:\\\\.|[^'\\\\\\n])*'", false))
+            case .charOnly: alternatives.append(("'(?:\\\\.[^'\\n]*|[^'\\\\\\n])'", false))
+            case .none: break
+            }
+            if backtick { alternatives.append(("`(?:\\\\.|[^`\\\\])*`", false)) }
+
+            let combined = alternatives.map { "(" + $0.pattern + ")" }.joined(separator: "|")
+            guard let regex = try? NSRegularExpression(pattern: combined, options: [.anchorsMatchLines]) else { return }
+            for m in regex.matches(in: text, options: [], range: fullRange) {
+                for (index, alt) in alternatives.enumerated() {
+                    let r = m.range(at: index + 1)
+                    guard r.location != NSNotFound else { continue }
+                    if alt.isComment || colorStrings {
+                        storage.addAttribute(.foregroundColor, value: alt.isComment ? commentColor : stringColor, range: r)
+                        storage.addAttribute(.font, value: baseFont, range: r)
+                    }
+                    break
+                }
+            }
+        }
+
+        let hashComment = "#[^\\n]*"
+        let lineStartComment = "^[ \\t]*[#;][^\\n]*"
+
         // Language-specific rules
         switch lang {
         case "json":
@@ -498,19 +482,21 @@ public final class SyntaxEngine {
             applyRegex("\\b-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?\\b", color: numberColor)
             // Booleans & null
             applyRegex("\\b(true|false|null)\\b", color: keywordColor, font: boldFont)
+            // JSONC comments (strings are skipped over, not recolored)
+            applyLiteralsAndComments(lineComment: "//[^\\n]*", block: true, singleQuote: .none, colorStrings: false)
 
         case "xml", "html":
             // Tags: <tag ... >
-            applyRegex("</?[A-Za-z0-9_-]+", color: tagColor, font: boldFont)
+            applyRegex("</?[A-Za-z0-9_:-]+", color: tagColor, font: boldFont)
             applyRegex("/?>", color: tagColor, font: boldFont)
             // Attribute names: attr=
-            applyRegex("\\b[A-Za-z0-9_-]+(?=\\=)", color: keyColor)
+            applyRegex("\\b[A-Za-z0-9_:@.-]+(?=\\=)", color: keyColor)
             // Attribute values: "value"
             applyRegex("\"(\\\\.|[^\"])*\"|'(\\\\.|[^'])*'", color: stringColor)
             // Entities: &amp;
             applyRegex("&[A-Za-z0-9#]+;", color: annotationColor)
             // XML/HTML comments: <!-- ... -->
-            applyRegex("<!--[\\s\\S]*?-->", color: commentColor)
+            applyRegex("<!--[\\s\\S]*?(?:-->|\\z)", color: commentColor)
 
         case "css":
             // Selectors / classes / ids
@@ -521,8 +507,7 @@ public final class SyntaxEngine {
             applyRegex("#[A-Fa-f0-9]{3,8}\\b", color: annotationColor)
             // Numbers & units: 12px, 1.5em
             applyRegex("\\b\\d+(\\.\\d+)?(px|em|rem|%|vh|vw|pt|s|ms)?\\b", color: numberColor)
-            // Comments: /* ... */
-            applyRegex("/\\*[\\s\\S]*?\\*/", color: commentColor)
+            applyLiteralsAndComments(lineComment: nil, block: true)
 
         case "sql":
             let sqlKeywords = [
@@ -541,19 +526,18 @@ public final class SyntaxEngine {
             let sqlTypes = ["INT", "INTEGER", "BIGINT", "SMALLINT", "VARCHAR", "CHAR", "TEXT", "BOOLEAN", "DATE", "TIMESTAMP", "DECIMAL", "NUMERIC", "FLOAT", "DOUBLE", "UUID", "JSON", "JSONB", "BLOB"]
             applyRegex("\\b(" + sqlTypes.joined(separator: "|") + ")\\b", options: [.caseInsensitive], color: typeColor)
 
-            // Numbers
             applyRegex("\\b\\d+(\\.\\d+)?\\b", color: numberColor)
-            // Strings: 'string'
-            applyRegex("'(\\\\.|[^'])*'", color: stringColor)
-            // Comments: -- line or /* block */
-            applyRegex("--.*$", options: [.anchorsMatchLines], color: commentColor)
-            applyRegex("/\\*[\\s\\S]*?\\*/", color: commentColor)
+            applyLiteralsAndComments(lineComment: "--[^\\n]*", block: true)
 
         case "markdown":
             // Headers: # Header
             applyRegex("^#{1,6}\\s.*$", options: [.anchorsMatchLines], color: tagColor, font: boldFont)
+            // Bold: **text**
+            applyRegex("\\*\\*[^*\\n]+\\*\\*", color: keywordColor, font: boldFont)
+            // List markers
+            applyRegex("^\\s*([-*+]|\\d+\\.)\\s", options: [.anchorsMatchLines], color: numberColor)
             // Code block: ```
-            applyRegex("```[\\s\\S]*?```", color: stringColor)
+            applyRegex("```[\\s\\S]*?(?:```|\\z)", color: stringColor)
             // Inline code: `code`
             applyRegex("`[^`\n]+`", color: annotationColor)
             // Links: [text](url)
@@ -568,12 +552,88 @@ public final class SyntaxEngine {
             applyRegex("\\[?(DEBUG|TRACE)\\]?", options: [.caseInsensitive], color: NSColor.systemBlue)
             applyRegex("\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?", color: commentColor)
 
+        case "yaml":
+            applyRegex("^(---|\\.\\.\\.)[ \\t]*$", options: [.anchorsMatchLines], color: tagColor, font: boldFont)
+            applyRegex("^[ \\t]*(?:-[ \\t]+)*(?:\"[^\"\\n]*\"|'[^'\\n]*'|[A-Za-z0-9_.\\-/$]+)(?=[ \\t]*:(?:[ \\t]|$))", options: [.anchorsMatchLines], color: keyColor, font: boldFont)
+            applyRegex("[&*][A-Za-z0-9_-]+|!![A-Za-z]+", color: annotationColor)
+            applyRegex("\\b(true|false|null|yes|no|on|off|True|False|Null)\\b", color: keywordColor)
+            applyRegex("(?<![\\w.])-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?(?![\\w.])", color: numberColor)
+            applyLiteralsAndComments(lineComment: "(?:^|(?<=[ \\t]))#[^\\n]*")
+
+        case "toml":
+            applyRegex("^[ \\t]*\\[\\[?[^\\]\\n]+\\]\\]?", options: [.anchorsMatchLines], color: tagColor, font: boldFont)
+            applyRegex("^[ \\t]*(?:\"[^\"\\n]*\"|'[^'\\n]*'|[A-Za-z0-9_.\\-]+)(?=[ \\t]*=)", options: [.anchorsMatchLines], color: keyColor)
+            applyRegex("\\b(true|false)\\b", color: keywordColor, font: boldFont)
+            applyRegex("\\b\\d{4}-\\d{2}-\\d{2}([T ]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?)?\\b", color: annotationColor)
+            applyRegex("(?<![\\w.])[+-]?(0x[0-9a-fA-F_]+|\\d[\\d_]*(\\.\\d+)?([eE][+-]?\\d+)?)(?![\\w.])", color: numberColor)
+            applyLiteralsAndComments(lineComment: hashComment, triple: true)
+
+        case "ini":
+            applyRegex("^[ \\t]*\\[[^\\]\\n]+\\]", options: [.anchorsMatchLines], color: tagColor, font: boldFont)
+            applyRegex("^[ \\t]*[A-Za-z0-9_.\\- ]+?(?=[ \\t]*[=:])", options: [.anchorsMatchLines], color: keyColor)
+            applyRegex("\\b(true|false|yes|no|on|off)\\b", options: [.caseInsensitive], color: keywordColor)
+            applyRegex("(?<![\\w.])-?\\d+(\\.\\d+)?(?![\\w.])", color: numberColor)
+            applyLiteralsAndComments(lineComment: lineStartComment)
+
+        case "properties":
+            // KEY=value, .env files, `export KEY=value`
+            applyRegex("^[ \\t]*(?:export[ \\t]+)?[A-Za-z0-9_.\\-\\[\\]]+(?=[ \\t]*[=:])", options: [.anchorsMatchLines], color: keyColor, font: boldFont)
+            applyRegex("\\$\\{?[A-Za-z_][A-Za-z0-9_.]*\\}?", color: annotationColor)
+            applyRegex("\\b(true|false)\\b", color: keywordColor)
+            applyRegex("(?<![\\w.])-?\\d+(\\.\\d+)?(?![\\w.])", color: numberColor)
+            applyLiteralsAndComments(lineComment: "(?:^|(?<=[ \\t]))[#!][^\\n]*")
+
+        case "ignore":
+            applyRegex("^!", options: [.anchorsMatchLines], color: keywordColor, font: boldFont)
+            applyRegex("\\*+|\\?", color: annotationColor)
+            applyRegex("/$", options: [.anchorsMatchLines], color: tagColor)
+            applyLiteralsAndComments(lineComment: "^[ \\t]*#[^\\n]*", singleQuote: .none)
+
+        case "csv":
+            highlightDelimitedText(
+                storage: storage, text: text,
+                palette: [keywordColor, stringColor, numberColor, typeColor, annotationColor, tagColor],
+                headerFont: boldFont
+            )
+
+        case "diff":
+            applyRegex("^(diff |index |\\+\\+\\+ |--- ).*$", options: [.anchorsMatchLines], color: keywordColor, font: boldFont)
+            applyRegex("^\\+(?!\\+\\+).*$", options: [.anchorsMatchLines], color: NSColor.systemGreen)
+            applyRegex("^-(?!--).*$", options: [.anchorsMatchLines], color: NSColor.systemRed)
+            applyRegex("^@@.*@@", options: [.anchorsMatchLines], color: tagColor, font: boldFont)
+
+        case "dockerfile":
+            let instructions = ["FROM", "RUN", "CMD", "LABEL", "EXPOSE", "ENV", "ADD", "COPY", "ENTRYPOINT", "VOLUME", "USER", "WORKDIR", "ARG", "ONBUILD", "STOPSIGNAL", "HEALTHCHECK", "SHELL", "MAINTAINER"]
+            applyRegex("^[ \\t]*(" + instructions.joined(separator: "|") + ")\\b", options: [.anchorsMatchLines, .caseInsensitive], color: keywordColor, font: boldFont)
+            applyRegex("\\bAS\\b", color: keywordColor)
+            applyRegex("\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?", color: annotationColor)
+            applyRegex("\\b\\d+\\b", color: numberColor)
+            applyLiteralsAndComments(lineComment: "^[ \\t]*#[^\\n]*")
+
+        case "makefile":
+            applyRegex("^[ \\t]*(ifeq|ifneq|ifdef|ifndef|else|endif|include|-include|sinclude|define|endef|export|unexport|override|vpath)\\b", options: [.anchorsMatchLines], color: keywordColor, font: boldFont)
+            applyRegex("^[A-Za-z0-9_.%/\\-$()\\[\\] ]+(?=[ \\t]*::?(?!=))", options: [.anchorsMatchLines], color: tagColor, font: boldFont)
+            applyRegex("^[ \\t]*[A-Za-z0-9_.]+(?=[ \\t]*[:+?!]?=)", options: [.anchorsMatchLines], color: keyColor)
+            applyRegex("\\$[({][^)}\\n]+[)}]|\\$[@<^?*%+|]", color: annotationColor)
+            applyLiteralsAndComments(lineComment: hashComment)
+
+        case "batch":
+            let batchKeywords = ["echo", "set", "if", "else", "goto", "call", "exit", "for", "in", "do", "rem", "setlocal", "endlocal", "pause", "cd", "dir", "copy", "move", "del", "mkdir", "rmdir", "start", "not", "exist", "errorlevel", "defined", "equ", "neq", "lss", "leq", "gtr", "geq", "shift", "title", "cls"]
+            applyRegex("\\b(" + batchKeywords.joined(separator: "|") + ")\\b", options: [.caseInsensitive], color: keywordColor, font: boldFont)
+            applyRegex("^[ \\t]*:[A-Za-z0-9_]+", options: [.anchorsMatchLines], color: tagColor, font: boldFont)
+            applyRegex("%[A-Za-z0-9_~:*]+%?|%%[A-Za-z]|![A-Za-z0-9_]+!", color: annotationColor)
+            applyRegex("\\b\\d+\\b", color: numberColor)
+            applyLiteralsAndComments(lineComment: "(?i:^[ \\t]*(?:rem\\b|::))[^\\n]*", singleQuote: .none)
+
         default:
-            // Standard C-family, Java, Swift, Python, Go, Rust, Kotlin
+            // Keyword-driven languages: Java, Swift, Python, Go, Rust, Kotlin, C-family, scripting languages
+            let caseInsensitiveLanguages: Set<String> = ["pascal", "ada", "vhdl", "fortran", "visual basic", "cmake"]
+            let keywordOptions: NSRegularExpression.Options = caseInsensitiveLanguages.contains(lang) ? [.caseInsensitive] : []
+
             let keywords = getKeywords(for: lang)
             if !keywords.isEmpty {
-                let kwPattern = "\\b(" + keywords.joined(separator: "|") + ")\\b"
-                applyRegex(kwPattern, color: keywordColor, font: boldFont)
+                let kwPattern = "(?<![\\w$])(" + keywords.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|") + ")(?![\\w$])"
+                applyRegex(kwPattern, options: keywordOptions, color: keywordColor, font: boldFont)
             }
 
             let types = getCommonTypes(for: lang)
@@ -582,43 +642,120 @@ public final class SyntaxEngine {
                 applyRegex(typePattern, color: typeColor, font: boldFont)
             }
 
-            // Annotations / Decorators: @Annotation or #attribute
-            applyRegex("@[A-Za-z0-9_]+", color: annotationColor, font: boldFont)
+            // Preprocessor directives: #include, #define, #region
+            if ["c", "c++", "objective-c", "c#"].contains(lang) {
+                applyRegex("^[ \\t]*#[ \\t]*[a-z]+", options: [.anchorsMatchLines], color: annotationColor, font: boldFont)
+            }
 
-            // Numbers: hex, float, integer
-            applyRegex("\\b(0x[0-9a-fA-F]+|\\d+(\\.\\d+)?([eE][+-]?\\d+)?)[fFlL]?\\b", color: numberColor)
+            // Variables: $name / ${name}
+            if ["shell", "powershell", "php", "perl", "terraform", "cmake"].contains(lang) {
+                applyRegex("\\$\\{?[A-Za-z_][A-Za-z0-9_:]*\\}?|\\$[0-9@#?*!$-]", color: annotationColor)
+            }
 
-            // Multiline strings: """...""" (Java text blocks / Python docstrings)
-            applyRegex("\"\"\"[\\s\\S]*?\"\"\"|'''[\\s\\S]*?'''", color: stringColor)
+            // Annotations / Decorators: @Annotation
+            if !["shell", "powershell", "php", "perl", "r", "lisp", "latex", "matlab", "assembly"].contains(lang) {
+                applyRegex("@[A-Za-z_][A-Za-z0-9_.]*", color: annotationColor, font: boldFont)
+            }
 
-            // Single and double quoted strings
-            applyRegex("\"(\\\\.|[^\"])*\"|'(\\\\.|[^'])*'", color: stringColor)
+            // Numbers: hex, binary, float, integer
+            applyRegex("\\b(0x[0-9a-fA-F_]+|0b[01_]+|\\d[\\d_]*(\\.\\d+)?([eE][+-]?\\d+)?)[fFlLuU]*\\b", color: numberColor)
 
-            // Line comments
-            let lineCommentPattern: String
+            // Strings and comments (applied last so they win over keywords/numbers inside them)
+            let slashComment = "//[^\\n]*"
+            let lineComment: String
             switch lang {
-            case "python", "shell", "bash", "properties", "yaml", "yml", "ruby", "perl", "powershell", "r", "julia", "elixir", "dockerfile", "makefile", "cmake":
-                lineCommentPattern = "#.*$"
-            case "sql", "lua", "haskell", "ada", "vhdl":
-                lineCommentPattern = "--.*$"
-            case "ini", "assembly", "lisp", "autoit":
-                lineCommentPattern = ";.*$"
+            case "python", "shell", "ruby", "perl", "powershell", "r", "julia", "elixir", "nim", "coffeescript", "cmake", "graphql":
+                lineComment = hashComment
+            case "terraform":
+                lineComment = "(?:#|//)[^\\n]*"
+            case "php":
+                lineComment = "(?://|#(?!\\[))[^\\n]*"
+            case "lua", "haskell", "ada", "vhdl":
+                lineComment = "--[^\\n]*"
+            case "lisp", "assembly", "autoit":
+                lineComment = ";[^\\n]*"
             case "latex", "erlang", "matlab":
-                lineCommentPattern = "%.*$"
-            case "visual basic", "vb":
-                lineCommentPattern = "'.*$"
+                lineComment = "%[^\\n]*"
+            case "visual basic":
+                lineComment = "(?i:'|\\brem\\b)[^\\n]*"
+            case "fortran":
+                lineComment = "![^\\n]*"
             default:
-                lineCommentPattern = "//.*$"
+                lineComment = slashComment
             }
-            applyRegex(lineCommentPattern, options: [.anchorsMatchLines], color: commentColor)
 
-            // Block comments
-            if !["python", "shell", "bash", "yaml", "ruby", "perl", "r", "dockerfile", "makefile"].contains(lang) {
-                applyRegex("/\\*[\\s\\S]*?\\*/", color: commentColor)
+            let singleQuote: SingleQuoteMode
+            switch lang {
+            case "rust", "ocaml", "haskell", "f#": singleQuote = .charOnly
+            case "lisp", "ada", "visual basic", "latex", "matlab", "erlang", "vhdl": singleQuote = .none
+            default: singleQuote = .string
             }
+
+            let tripleQuoteLanguages: Set<String> = ["python", "java", "kotlin", "swift", "scala", "groovy", "c#", "julia", "dart", "coffeescript"]
+            let backtickLanguages: Set<String> = ["javascript", "typescript", "go", "shell", "coffeescript", "dart"]
+
+            applyLiteralsAndComments(
+                lineComment: lineComment,
+                block: lineComment == slashComment || lang == "php" || lang == "terraform",
+                triple: tripleQuoteLanguages.contains(lang),
+                singleQuote: singleQuote,
+                backtick: backtickLanguages.contains(lang)
+            )
         }
 
         storage.endEditing()
+    }
+
+    private enum SingleQuoteMode {
+        case string
+        case charOnly
+        case none
+    }
+
+    /// Rainbow-column highlighting for CSV/TSV with a bold header row. Quote-aware, single pass.
+    private static func highlightDelimitedText(storage: NSTextStorage, text: String, palette: [NSColor], headerFont: NSFont) {
+        let ns = text as NSString
+        let length = ns.length
+        guard length > 0, !palette.isEmpty else { return }
+
+        let firstNewline = ns.range(of: "\n").location
+        let headEnd = min(firstNewline == NSNotFound ? length : firstNewline, 4096)
+        let head = ns.substring(to: headEnd)
+        let candidates: [(Character, unichar)] = [(",", 44), (";", 59), ("\t", 9), ("|", 124)]
+        let delimiter = candidates.max(by: { lhs, rhs in
+            head.filter({ $0 == lhs.0 }).count < head.filter({ $0 == rhs.0 }).count
+        })?.1 ?? 44
+
+        var column = 0
+        var fieldStart = 0
+        var inQuotes = false
+        var inHeader = true
+
+        func flush(_ end: Int) {
+            guard end > fieldStart else { return }
+            let range = NSRange(location: fieldStart, length: end - fieldStart)
+            storage.addAttribute(.foregroundColor, value: palette[column % palette.count], range: range)
+            if inHeader { storage.addAttribute(.font, value: headerFont, range: range) }
+        }
+
+        for i in 0..<length {
+            let c = ns.character(at: i)
+            if c == 34 {
+                inQuotes.toggle()
+            } else if !inQuotes {
+                if c == delimiter {
+                    flush(i)
+                    column += 1
+                    fieldStart = i + 1
+                } else if c == 10 || c == 13 {
+                    flush(i)
+                    column = 0
+                    fieldStart = i + 1
+                    inHeader = false
+                }
+            }
+        }
+        flush(length)
     }
 
     private static func getKeywords(for lang: String) -> [String] {
@@ -738,7 +875,52 @@ public final class SyntaxEngine {
                 "testImplementation", "runtimeOnly", "compileOnly", "repositories",
                 "mavenCentral", "google", "gradlePluginPortal", "group", "task", "def"
             ]
+        case "terraform":
+            return ["resource", "data", "variable", "output", "module", "provider", "locals", "terraform", "for_each", "count", "dynamic", "depends_on", "lifecycle", "provisioner", "backend", "true", "false", "null", "for", "in", "if"]
+        case "protobuf":
+            return ["syntax", "package", "import", "option", "message", "enum", "service", "rpc", "returns", "repeated", "optional", "required", "oneof", "map", "reserved", "extend", "extensions", "stream", "public", "weak", "true", "false"]
+        case "graphql":
+            return ["query", "mutation", "subscription", "fragment", "on", "type", "interface", "union", "enum", "input", "scalar", "schema", "extend", "implements", "directive", "repeatable", "true", "false", "null"]
+        case "cmake":
+            return ["cmake_minimum_required", "project", "add_executable", "add_library", "add_subdirectory", "target_link_libraries", "target_include_directories", "target_compile_definitions", "target_compile_options", "set", "unset", "if", "elseif", "else", "endif", "foreach", "endforeach", "while", "endwhile", "function", "endfunction", "macro", "endmacro", "include", "find_package", "option", "message", "install", "file", "list", "string", "return", "configure_file", "add_custom_command", "add_custom_target", "add_definitions", "include_directories", "link_directories"]
+        case "groovy":
+            return ["def", "class", "interface", "trait", "enum", "extends", "implements", "import", "package", "return", "if", "else", "for", "while", "do", "switch", "case", "default", "break", "continue", "try", "catch", "finally", "throw", "new", "this", "super", "null", "true", "false", "static", "final", "public", "private", "protected", "in", "as", "instanceof", "pipeline", "stage", "steps", "node", "agent"]
+        case "haskell":
+            return ["module", "import", "qualified", "as", "hiding", "where", "let", "in", "if", "then", "else", "case", "of", "do", "data", "type", "newtype", "class", "instance", "deriving", "infixl", "infixr", "infix", "default", "foreign"]
+        case "elixir":
+            return ["def", "defp", "defmodule", "defmacro", "defstruct", "defprotocol", "defimpl", "do", "end", "fn", "if", "else", "unless", "cond", "case", "with", "when", "for", "in", "import", "alias", "require", "use", "quote", "unquote", "receive", "try", "rescue", "catch", "after", "raise", "nil", "true", "false", "and", "or", "not"]
+        case "erlang":
+            return ["module", "export", "import", "include", "define", "record", "spec", "case", "of", "end", "if", "when", "receive", "after", "try", "catch", "fun", "begin", "andalso", "orelse", "not", "and", "or", "div", "rem", "true", "false"]
+        case "ocaml", "f#":
+            return ["let", "rec", "in", "and", "fun", "function", "match", "with", "if", "then", "else", "begin", "end", "type", "module", "open", "struct", "sig", "val", "of", "when", "try", "exception", "mutable", "true", "false", "for", "while", "do", "done", "to", "namespace", "member", "new", "yield", "use", "inherit", "interface", "abstract", "override", "private", "public", "internal"]
+        case "lisp":
+            return ["defun", "defmacro", "defvar", "defparameter", "defconstant", "defstruct", "defclass", "defmethod", "defgeneric", "define", "lambda", "let", "let*", "letrec", "if", "cond", "case", "when", "unless", "do", "loop", "progn", "setq", "setf", "quote", "require", "provide", "ns", "def", "defn", "fn", "nil", "t"]
+        case "matlab":
+            return ["function", "end", "if", "elseif", "else", "for", "while", "switch", "case", "otherwise", "break", "continue", "return", "try", "catch", "global", "persistent", "classdef", "properties", "methods", "events", "true", "false"]
+        case "coffeescript":
+            return ["class", "extends", "constructor", "super", "new", "if", "else", "unless", "then", "for", "in", "of", "while", "until", "loop", "switch", "when", "return", "break", "continue", "try", "catch", "finally", "throw", "and", "or", "not", "is", "isnt", "yes", "no", "on", "off", "true", "false", "null", "undefined", "this", "import", "export", "default", "await", "async"]
+        case "d", "actionscript":
+            return ["class", "interface", "struct", "enum", "module", "import", "public", "private", "protected", "static", "final", "override", "abstract", "function", "var", "const", "void", "return", "if", "else", "for", "foreach", "while", "do", "switch", "case", "default", "break", "continue", "try", "catch", "finally", "throw", "new", "this", "super", "null", "true", "false", "auto", "alias", "template", "mixin", "package", "extends", "implements", "is", "in", "out", "ref", "lazy", "pure", "nothrow", "unittest"]
+        case "pascal":
+            return ["program", "unit", "uses", "interface", "implementation", "begin", "end", "var", "const", "type", "procedure", "function", "if", "then", "else", "for", "to", "downto", "do", "while", "repeat", "until", "case", "of", "record", "class", "object", "private", "public", "protected", "try", "except", "finally", "raise", "nil", "true", "false", "and", "or", "not", "div", "mod", "inherited", "constructor", "destructor", "override", "virtual"]
+        case "ada":
+            return ["package", "body", "is", "begin", "end", "procedure", "function", "return", "if", "then", "elsif", "else", "case", "when", "for", "while", "loop", "exit", "declare", "type", "subtype", "record", "array", "of", "with", "use", "null", "and", "or", "not", "xor", "in", "out", "access", "private", "generic", "raise", "exception", "others", "task", "protected"]
+        case "vhdl":
+            return ["library", "use", "entity", "architecture", "of", "is", "begin", "end", "port", "generic", "map", "signal", "variable", "constant", "process", "if", "then", "elsif", "else", "case", "when", "for", "while", "loop", "in", "out", "inout", "buffer", "component", "package", "body", "function", "procedure", "return", "wait", "until", "after", "others", "and", "or", "not", "xor", "nand", "nor", "downto", "to", "type", "subtype", "std_logic", "std_logic_vector"]
+        case "verilog":
+            return ["module", "endmodule", "input", "output", "inout", "wire", "reg", "logic", "integer", "parameter", "localparam", "assign", "always", "always_ff", "always_comb", "initial", "begin", "end", "if", "else", "case", "endcase", "default", "for", "while", "posedge", "negedge", "function", "endfunction", "task", "endtask", "generate", "endgenerate", "genvar", "typedef", "enum", "struct", "interface", "endinterface", "class", "endclass"]
+        case "fortran":
+            return ["program", "end", "subroutine", "function", "module", "use", "implicit", "none", "integer", "real", "double", "precision", "complex", "logical", "character", "dimension", "allocatable", "allocate", "deallocate", "parameter", "intent", "in", "out", "inout", "if", "then", "else", "elseif", "do", "while", "select", "case", "call", "return", "contains", "stop", "print", "write", "read", "type", "interface"]
+        case "visual basic":
+            return ["Dim", "As", "Sub", "Function", "End", "If", "Then", "Else", "ElseIf", "For", "Each", "Next", "While", "Wend", "Do", "Loop", "Select", "Case", "Class", "Module", "Public", "Private", "Protected", "Friend", "Shared", "Static", "Const", "Return", "Exit", "Imports", "Namespace", "New", "Nothing", "True", "False", "And", "Or", "Not", "Is", "ByVal", "ByRef", "Try", "Catch", "Finally", "Throw", "With", "Set", "Let", "Option", "Explicit", "On", "Error", "Resume", "Call", "To", "Step", "In", "Of", "Integer", "String", "Boolean", "Double", "Long", "Object"]
+        case "tcl":
+            return ["proc", "set", "unset", "if", "elseif", "else", "for", "foreach", "while", "switch", "break", "continue", "return", "expr", "puts", "gets", "global", "upvar", "namespace", "eval", "catch", "error", "source", "package", "require", "list", "lappend", "lindex", "string", "array", "dict"]
+        case "nim":
+            return ["proc", "func", "method", "iterator", "template", "macro", "var", "let", "const", "type", "object", "enum", "tuple", "if", "elif", "else", "when", "case", "of", "for", "while", "in", "block", "break", "continue", "return", "yield", "import", "include", "from", "export", "try", "except", "finally", "raise", "discard", "nil", "true", "false", "and", "or", "not", "xor", "is", "isnot", "as", "ref", "ptr", "static"]
+        case "assembly", "autoit", "latex", "properties", "yaml", "toml", "ini", "csv", "log", "diff", "ignore", "makefile", "dockerfile", "batch", "markdown":
+            return []
         default:
+            // Unknown or unlisted C-like language: a conservative keyword set beats no highlighting at all.
             return ["function", "const", "let", "var", "import", "export", "class", "return", "if", "else", "for", "while"]
         }
     }

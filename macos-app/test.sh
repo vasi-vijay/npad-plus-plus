@@ -48,6 +48,7 @@ MODULE_CACHE_FLAG="-module-cache-path /tmp/swift-cache -Xcc -fmodules-cache-path
 
 swiftc -O -target arm64-apple-macos14.0 ${SDK_FLAG} ${MODULE_CACHE_FLAG} \
     Sources/NotepadPlusMac/Models/FileComparisonService.swift \
+    Sources/NotepadPlusMac/Models/FileTypeSupport.swift \
     Sources/NotepadPlusMac/Models/DocumentModel.swift \
     Sources/NotepadPlusMac/Models/SearchEngine.swift \
     Sources/NotepadPlusMac/Models/ProjectExplorerModel.swift \

@@ -58,6 +58,38 @@ final class NotepadPlusMacTests: XCTestCase {
         XCTAssertEqual(SyntaxEngine.detectLanguage(from: "unknown.xyz"), "Plain Text")
     }
 
+    func testExtendedFileTypeDetection() {
+        XCTAssertEqual(SyntaxEngine.detectLanguage(from: ".env"), "Properties")
+        XCTAssertEqual(SyntaxEngine.detectLanguage(from: ".env.local"), "Properties")
+        XCTAssertEqual(SyntaxEngine.detectLanguage(from: ".gitignore"), "Ignore")
+        XCTAssertEqual(SyntaxEngine.detectLanguage(from: "Dockerfile"), "Dockerfile")
+        XCTAssertEqual(SyntaxEngine.detectLanguage(from: "App.jsx"), "JavaScript")
+        XCTAssertEqual(SyntaxEngine.detectLanguage(from: "data.csv"), "CSV")
+        XCTAssertEqual(SyntaxEngine.detectLanguage(from: "Cargo.toml"), "TOML")
+        XCTAssertEqual(SyntaxEngine.detectLanguage(from: "run", content: "#!/usr/bin/env python3\n"), "Python")
+        XCTAssertEqual(SyntaxEngine.detectLanguage(from: "run", content: "#!/usr/bin/ruby\nputs 'flush'"), "Ruby")
+    }
+
+    func testFileCodecRoundTrip() throws {
+        var bom = Data([0xEF, 0xBB, 0xBF])
+        bom.append("héllo".data(using: .utf8)!)
+        let decoded = FileCodec.decode(bom)
+        XCTAssertEqual(decoded.text, "héllo")
+        XCTAssertEqual(decoded.encoding, .utf8BOM)
+
+        let legacy = Data([0x63, 0x61, 0x66, 0xE9])
+        let legacyDecoded = FileCodec.decode(legacy)
+        XCTAssertEqual(legacyDecoded.text, "café")
+        XCTAssertEqual(try FileCodec.encode(legacyDecoded.text, as: legacyDecoded.encoding), legacy)
+
+        XCTAssertThrowsError(try FileCodec.encode("日本語", as: .ascii))
+    }
+
+    func testBinaryDetection() {
+        XCTAssertTrue(FileTypeRegistry.looksBinary(Data([0x89, 0x50, 0x4E, 0x47, 0x00, 0x00])))
+        XCTAssertFalse(FileTypeRegistry.looksBinary("print('hi')\n".data(using: .utf8)!))
+    }
+
     // MARK: - Font Settings Tests
     func testFontAdjustments() {
         let manager = AppStateManager()

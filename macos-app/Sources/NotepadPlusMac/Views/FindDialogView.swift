@@ -120,6 +120,7 @@ public struct NotepadPlusFindDialogView: View {
                             .font(.system(size: 9))
                     }
                     .menuStyle(.borderlessButton)
+                    .help("Search history: reuse an earlier search")
                     .frame(width: 18)
                 }
 
@@ -163,6 +164,7 @@ public struct NotepadPlusFindDialogView: View {
                                 .font(.system(size: 9))
                         }
                         .menuStyle(.borderlessButton)
+                        .help("Replace history: reuse an earlier replacement")
                         .frame(width: 18)
                     }
                 }
@@ -610,7 +612,53 @@ public struct NotepadPlusFindDialogView: View {
                 appState.copyMarkedText()
             }
             .frame(maxWidth: .infinity)
+
+            markColorPicker
         }
+    }
+
+    /// Five-colour chooser for Mark All; the ringed swatch is the colour that will be used.
+    private var markColorPicker: some View {
+        VStack(spacing: 6) {
+            Text("Highlight color")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 8) {
+                ForEach(MarkPalette.names, id: \.self) { name in
+                    let isSelected = appState.activeMarkColor == name
+                    Button(action: { appState.activeMarkColor = name }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(nsColor: MarkPalette.highlight(name).withAlphaComponent(1)))
+                                .frame(width: 22, height: 22)
+                            Circle()
+                                .stroke(Color.primary.opacity(0.25), lineWidth: 1)
+                                .frame(width: 22, height: 22)
+                            if isSelected {
+                                Circle()
+                                    .stroke(Color.accentColor, lineWidth: 2.5)
+                                    .frame(width: 29, height: 29)
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.black.opacity(0.7))
+                            }
+                        }
+                        .frame(width: 30, height: 30)
+                        .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("\(name) highlight" + (isSelected ? " (selected)" : ""))
+                    .accessibilityLabel("\(name) highlight")
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                }
+            }
+
+            Text("Mark All uses \(appState.activeMarkColor)")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+        }
+        .padding(.top, 6)
     }
 
     private func selectDirectory() {

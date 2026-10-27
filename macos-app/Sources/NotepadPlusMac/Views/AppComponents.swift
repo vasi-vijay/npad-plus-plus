@@ -95,19 +95,7 @@ public struct DocumentTabBar: View {
                     appState.dragTargetIndex = nil
                     return true
                 }
-                for provider in providers {
-                    if provider.hasItemConformingToTypeIdentifier("public.file-url") {
-                        _ = provider.loadObject(ofClass: NSURL.self) { item, _ in
-                            if let url = item as? URL {
-                                DispatchQueue.main.async {
-                                    _ = try? appState.openFileFromURL(url)
-                                }
-                            }
-                        }
-                        return true
-                    }
-                }
-                return false
+                return appState.openDroppedProviders(providers)
             }
 
             Spacer(minLength: 0)
@@ -239,19 +227,7 @@ public struct DocumentTabItem: View {
                 appState.dragTargetIndex = nil
                 return true
             }
-            for provider in providers {
-                if provider.hasItemConformingToTypeIdentifier("public.file-url") {
-                    _ = provider.loadObject(ofClass: NSURL.self) { item, _ in
-                        if let url = item as? URL {
-                            DispatchQueue.main.async {
-                                _ = try? appState.openFileFromURL(url)
-                            }
-                        }
-                    }
-                    return true
-                }
-            }
-            return false
+            return appState.openDroppedProviders(providers)
         }
         .contextMenu {
             Button("Close Tab") {
@@ -346,7 +322,9 @@ public struct QuickActionToolbar: View {
                 Image(systemName: "sidebar.left")
                     .foregroundColor(appState.isSidebarVisible ? .accentColor : .primary)
             }
-            .help("Toggle Sidebar (⌘B)")
+            .help("Sidebar: show or hide the file explorer (⌘B)")
+            .accessibilityLabel("Sidebar")
+            .accessibilityHint("Show or hide the file explorer")
 
             Divider().frame(height: 16)
 
@@ -354,18 +332,24 @@ public struct QuickActionToolbar: View {
             Button(action: { appState.createNewDocument() }) {
                 Image(systemName: "doc.badge.plus")
             }
-            .help("New File (⌘N)")
+            .help("New: create a new file (⌘N)")
+            .accessibilityLabel("New")
+            .accessibilityHint("Create a new file")
 
             Button(action: { appState.openDocument() }) {
                 Image(systemName: "folder")
             }
-            .help("Open File (⌘O)")
+            .help("Open: open files from disk (⌘O)")
+            .accessibilityLabel("Open")
+            .accessibilityHint("Open files from disk")
 
             Button(action: { appState.saveActiveDocument() }) {
                 Image(systemName: "square.and.arrow.down")
                     .foregroundColor(appState.activeDocument?.isModified == true ? .accentColor : .primary)
             }
-            .help("Save (⌘S)")
+            .help("Save: save the current file (⌘S)")
+            .accessibilityLabel("Save")
+            .accessibilityHint("Save the current file")
 
             Divider().frame(height: 16)
 
@@ -396,30 +380,41 @@ public struct QuickActionToolbar: View {
                     Image(systemName: "highlighter")
                         .foregroundColor(markColorSwiftUI(appState.activeMarkColor))
                 }
-                .help("Mark/Unmark Selection (⌘M)")
+                .help("Highlight: mark the selected text in \(appState.activeMarkColor.lowercased()) (⌘M)")
+                .accessibilityLabel("Highlight")
+                .accessibilityHint("Highlights the selected text in \(appState.activeMarkColor)")
 
                 Menu {
-                    ForEach(["Yellow", "Green", "Cyan", "Pink", "Orange"], id: \.self) { cName in
-                        Button(action: { appState.activeMarkColor = cName }) {
-                            HStack {
-                                Text(cName)
-                                if appState.activeMarkColor == cName {
-                                    Image(systemName: "checkmark")
-                                }
+                    ForEach(MarkPalette.names, id: \.self) { cName in
+                        Button(action: { appState.markSelection(colorName: cName) }) {
+                            Label {
+                                Text(appState.activeMarkColor == cName ? "\(cName)  ✓" : cName)
+                            } icon: {
+                                Image(nsImage: MarkPalette.swatch(cName))
                             }
                         }
                     }
                     Divider()
-                    Button("Clear All Marks in Document") {
+                    Button("Remove Highlight from Selection") {
+                        appState.removeMarkFromSelection()
+                    }
+                    Button("Clear All Highlights in Document") {
                         appState.clearAllMarksInActiveDocument()
                     }
                 } label: {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8))
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 3) {
+                        Image(nsImage: MarkPalette.swatch(appState.activeMarkColor, size: 10))
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8))
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .menuStyle(.borderlessButton)
-                .frame(width: 14)
+                .frame(width: 34)
+                .help("Highlight color: choose Yellow, Green, Pink, Blue or Orange and apply it to the selection")
+                .accessibilityLabel("Highlight color")
+                .accessibilityValue(appState.activeMarkColor)
+                .accessibilityHint("Choose Yellow, Green, Pink, Blue or Orange and apply it to the selection")
             }
 
             Divider().frame(height: 16)
@@ -439,7 +434,9 @@ public struct QuickActionToolbar: View {
                 .cornerRadius(4)
             }
             .buttonStyle(.plain)
-            .help("Run Active Source File (F5)")
+            .help("Run: run the current source file (F5)")
+            .accessibilityLabel("Run")
+            .accessibilityHint("Run the current source file")
             .onHover { inside in
                 if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
             }
@@ -449,13 +446,17 @@ public struct QuickActionToolbar: View {
                 Image(systemName: "terminal")
                     .foregroundColor(appState.isBottomPanelVisible ? .green : .primary)
             }
-            .help("Developer Terminal (^`)")
+            .help("Terminal: show or hide the developer terminal (^`)")
+            .accessibilityLabel("Terminal")
+            .accessibilityHint("Show or hide the developer terminal")
 
             // Bookmarks
             Button(action: { appState.nextBookmark() }) {
                 Image(systemName: "bookmark")
             }
-            .help("Next Bookmark (F2)")
+            .help("Bookmark: jump to the next bookmark (F2)")
+            .accessibilityLabel("Bookmark")
+            .accessibilityHint("Jump to the next bookmark")
 
             // Word Wrap Toggle (⌥Z)
             Button(action: { appState.wordWrap.toggle() }) {
@@ -468,7 +469,9 @@ public struct QuickActionToolbar: View {
                 }
                 .foregroundColor(appState.wordWrap ? .accentColor : .secondary)
             }
-            .help(appState.wordWrap ? "Word Wrap: ON (⌥Z)" : "Word Wrap: OFF (⌥Z)")
+            .help(appState.wordWrap ? "Word Wrap: on, click to turn off (⌥Z)" : "Word Wrap: off, click to turn on (⌥Z)")
+            .accessibilityLabel("Word Wrap")
+            .accessibilityValue(appState.wordWrap ? "On" : "Off")
 
             // Search & Replace Dialog Controls (Retained single Search button)
             Button(action: {
@@ -481,7 +484,9 @@ public struct QuickActionToolbar: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(appState.showFindWindow && appState.findDialogTab == .find ? .accentColor : .primary)
             }
-            .help("Find in File (⌘F)")
+            .help("Search: find text in the current file (⌘F)")
+            .accessibilityLabel("Search")
+            .accessibilityHint("Find text in the current file")
 
             Button(action: {
                 if appState.showFindWindow && appState.findDialogTab == .replace {
@@ -493,7 +498,9 @@ public struct QuickActionToolbar: View {
                 Image(systemName: "arrow.triangle.swap")
                     .foregroundColor(appState.showFindWindow && appState.findDialogTab == .replace ? .accentColor : .primary)
             }
-            .help("Find & Replace (⌘H)")
+            .help("Replace: find and replace text (⌘H)")
+            .accessibilityLabel("Replace")
+            .accessibilityHint("Find and replace text")
 
             Divider().frame(height: 16)
 
@@ -508,7 +515,9 @@ public struct QuickActionToolbar: View {
                 Image(systemName: "square.split.2x1")
                     .foregroundColor(appState.isSplitViewActive ? .accentColor : .primary)
             }
-            .help(appState.isSplitViewActive ? "Close Split View (⇧⌥⌘S)" : "Split Vertically (⌥⌘S)")
+            .help(appState.isSplitViewActive ? "Split: close the split view (⇧⌥⌘S)" : "Split: view two files side by side (⌥⌘S)")
+            .accessibilityLabel("Split View")
+            .accessibilityValue(appState.isSplitViewActive ? "Active" : "Off")
 
             // Compare Files Menu
             Menu {
@@ -548,7 +557,9 @@ public struct QuickActionToolbar: View {
                 }
             }
             .menuStyle(.borderlessButton)
-            .help("File Comparison (Notepad++ Compare)")
+            .help("Compare: compare two files and show differences")
+            .accessibilityLabel("Compare")
+            .accessibilityHint("Compare two files and show differences")
 
             Spacer()
 
@@ -567,7 +578,9 @@ public struct QuickActionToolbar: View {
                     Image(systemName: "textformat.size.smaller")
                         .font(.system(size: 11))
                 }
-                .help("Decrease Font Size (⌘-)")
+                .help("Smaller: decrease the font size (⌘-)")
+                .accessibilityLabel("Smaller")
+                .accessibilityHint("Decrease the font size")
 
                 Text("\(Int(appState.fontSize))pt")
                     .font(.system(size: 10, design: .monospaced))
@@ -577,7 +590,9 @@ public struct QuickActionToolbar: View {
                     Image(systemName: "textformat.size.larger")
                         .font(.system(size: 11))
                 }
-                .help("Increase Font Size (⌘+)")
+                .help("Larger: increase the font size (⌘+)")
+                .accessibilityLabel("Larger")
+                .accessibilityHint("Increase the font size")
             }
 
             Divider().frame(height: 16)
@@ -586,7 +601,9 @@ public struct QuickActionToolbar: View {
             Button(action: { appState.showSettingsSheet = true }) {
                 Image(systemName: "gearshape")
             }
-            .help("Preferences (⌘,)")
+            .help("Settings: open preferences (⌘,)")
+            .accessibilityLabel("Settings")
+            .accessibilityHint("Open preferences")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -598,7 +615,7 @@ public struct QuickActionToolbar: View {
     private func markColorSwiftUI(_ name: String) -> Color {
         switch name.lowercased() {
         case "green": return .green
-        case "cyan": return .cyan
+        case "blue", "cyan": return .blue
         case "pink": return .pink
         case "orange": return .orange
         default: return .yellow
@@ -848,6 +865,7 @@ public struct DocumentSidebar: View {
                                 }
                             }
                             .buttonStyle(.plain)
+                            .help("Go to bookmarked line \(lineNum)")
                         }
                         .frame(maxHeight: 110)
                     }
@@ -905,6 +923,7 @@ public struct BottomDeveloperPanel: View {
                         .font(.system(size: 10))
                 }
                 .buttonStyle(.plain)
+                .help("Close: hide the bottom panel")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
@@ -1218,8 +1237,7 @@ public struct EditorStatusBar: View {
                 Menu(doc.lineEnding.rawValue) {
                     ForEach(LineEndingFormat.allCases) { ending in
                         Button(ending.rawValue) {
-                            doc.lineEnding = ending
-                            doc.isModified = true
+                            doc.convertLineEndings(to: ending)
                         }
                     }
                 }
@@ -1511,7 +1529,7 @@ public struct MainWindowView: View {
                 HStack {
                     Text("Highlight Mark Color:")
                     Picker("", selection: $appState.activeMarkColor) {
-                        ForEach(["Yellow", "Green", "Cyan", "Pink", "Orange"], id: \.self) { c in
+                        ForEach(MarkPalette.names, id: \.self) { c in
                             Text(c).tag(c)
                         }
                     }
@@ -1636,49 +1654,112 @@ extension AppStateManager {
 
     public func openDocument() {
         let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
+        panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        if panel.runModal() == .OK, let url = panel.url {
-            let ext = url.pathExtension.lowercased()
-            let binaryExts: Set<String> = [
-                "numbers", "pages", "key", "zip", "tar", "gz", "dmg", "pkg",
-                "exe", "bin", "dylib", "so", "class", "jar", "png", "jpg",
-                "jpeg", "gif", "ico", "pdf", "docx", "xlsx", "pptx", "sqlite", "db"
-            ]
-            if binaryExts.contains(ext) {
+        panel.showsHiddenFiles = true
+        panel.allowsOtherFileTypes = true
+        panel.title = "Open Files"
+        if panel.runModal() == .OK {
+            openFilesInteractively(panel.urls)
+        }
+    }
+
+    public func openFilesInteractively(_ urls: [URL]) {
+        for url in urls {
+            openFileInteractively(url)
+        }
+    }
+
+    /// Opens a file (or a folder as the project workspace) from a user-facing entry point: the open panel,
+    /// drag & drop, Finder "Open With", or the project explorer. Warns before opening binary or very large
+    /// files and reports failures instead of silently ignoring them.
+    @discardableResult
+    public func openFileInteractively(_ url: URL, inPane pane: EditorPaneSide? = nil) -> EditorDocument? {
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            workspaceRootURL = url
+            loadProject(from: url)
+            scheduleSessionSave()
+            return nil
+        }
+        if let pane = pane {
+            return openFileInPane(url: url, pane: pane)
+        }
+        guard confirmOpenable(url) else { return nil }
+        do {
+            return try openFileFromURL(url)
+        } catch {
+            presentOpenError(error, for: url)
+            return nil
+        }
+    }
+
+    /// Returns false when the user declines to open a binary or very large file.
+    public func confirmOpenable(_ url: URL) -> Bool {
+        if documents.contains(where: { $0.fileURL?.standardizedFileURL == url.standardizedFileURL }) {
+            return true
+        }
+
+        if FileTypeRegistry.isKnownBinaryExtension(url) {
+            let alert = NSAlert()
+            alert.messageText = "Cannot Open Binary File"
+            alert.informativeText = "'\(url.lastPathComponent)' is a binary or package format and cannot be opened as text.\n\nNPad++ is designed for source code and text files (.java, .py, .swift, .ts, .json, .env, .txt, etc.). Please choose a text or source code file."
+            alert.alertStyle = .warning
+            alert.runModal()
+            return false
+        }
+
+        let maxSafeBytes = 100 * 1024 * 1024
+        if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size > maxSafeBytes {
+            let alert = NSAlert()
+            alert.messageText = "Large File"
+            alert.informativeText = "'\(url.lastPathComponent)' is \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)). Opening it may make the editor slow.\n\nDo you want to open it anyway?"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: "Open Anyway")
+            if alert.runModal() != .alertSecondButtonReturn { return false }
+        }
+
+        if let handle = try? FileHandle(forReadingFrom: url) {
+            defer { try? handle.close() }
+            let head = (try? handle.read(upToCount: 8192)) ?? Data()
+            if FileTypeRegistry.looksBinary(head) {
                 let alert = NSAlert()
-                alert.messageText = "Cannot Open Binary File"
-                alert.informativeText = "'\(url.lastPathComponent)' is a binary or package format and cannot be opened as text.\n\nNPad++ is designed for source code (.java, .swift, .py, .ts, .json, .txt, etc.). Please choose a text or source code file."
+                alert.messageText = "Binary Data Detected"
+                alert.informativeText = "'\(url.lastPathComponent)' contains binary data and may not display correctly as text.\n\nDo you want to attempt opening anyway?"
                 alert.alertStyle = .warning
-                alert.runModal()
-                return
-            }
-
-            do {
-                let data = try Data(contentsOf: url)
-
-                let prefixSample = data.prefix(4096)
-                if prefixSample.contains(0x00) {
-                    let alert = NSAlert()
-                    alert.messageText = "Binary Data Detected"
-                    alert.informativeText = "'\(url.lastPathComponent)' contains null bytes and appears to be a binary file.\n\nDo you want to attempt opening anyway?"
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "Cancel")
-                    alert.addButton(withTitle: "Open Anyway")
-                    if alert.runModal() != .alertSecondButtonReturn {
-                        return
-                    }
-                }
-
-                _ = try openFileFromURL(url)
-            } catch {
-                let alert = NSAlert()
-                alert.messageText = "Failed to open file"
-                alert.informativeText = error.localizedDescription
-                alert.runModal()
+                alert.addButton(withTitle: "Cancel")
+                alert.addButton(withTitle: "Open Anyway")
+                if alert.runModal() != .alertSecondButtonReturn { return false }
             }
         }
+        return true
+    }
+
+    public func presentOpenError(_ error: Error, for url: URL) {
+        let alert = NSAlert()
+        alert.messageText = "Failed to Open \(url.lastPathComponent)"
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        alert.runModal()
+    }
+
+    /// Opens every file URL carried by drag & drop providers (not just the first).
+    @discardableResult
+    public func openDroppedProviders(_ providers: [NSItemProvider]) -> Bool {
+        var handled = false
+        for provider in providers where provider.hasItemConformingToTypeIdentifier("public.file-url") {
+            handled = true
+            _ = provider.loadObject(ofClass: NSURL.self) { item, _ in
+                if let url = item as? URL {
+                    DispatchQueue.main.async {
+                        self.openFileInteractively(url)
+                    }
+                }
+            }
+        }
+        return handled
     }
 
     public func saveActiveDocument(saveAs: Bool = false) {
@@ -2163,8 +2244,7 @@ public struct EncodingCommands: Commands {
             Menu("Line Ending Format") {
                 ForEach(LineEndingFormat.allCases) { ending in
                     Button(ending.rawValue) {
-                        appState.activeDocument?.lineEnding = ending
-                        appState.activeDocument?.isModified = true
+                        appState.activeDocument?.convertLineEndings(to: ending)
                     }
                 }
             }
@@ -2897,6 +2977,23 @@ public struct ComparisonToolbarView: View {
     }
 }
 
+/// Geometry of the "drop here to split screen" target inside the editor area.
+/// The zone is the right half of the editor container itself (not the window or screen), so it never reacts to
+/// the toolbar, tab bar, sidebar or bottom panel, and it starts at the 50% line instead of the far edge.
+public enum SplitDropZone {
+    public static let activationFraction: CGFloat = 0.5
+
+    public static func zoneWidth(containerWidth: CGFloat) -> CGFloat {
+        max(0, containerWidth) * activationFraction
+    }
+
+    /// `x` is measured from the container's left edge.
+    public static func isInside(x: CGFloat, containerWidth: CGFloat) -> Bool {
+        guard containerWidth > 0, x >= 0, x <= containerWidth else { return false }
+        return x >= containerWidth - zoneWidth(containerWidth: containerWidth)
+    }
+}
+
 // MARK: - Single Editor Container View with Vertical Split Drop Zone
 public struct SingleEditorContainerView: View {
     @ObservedObject var document: EditorDocument
@@ -2921,8 +3018,9 @@ public struct SingleEditorContainerView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                // Right-side Drop Zone (Right ~35% of editor width, minimum 160px)
-                let dropZoneWidth = min(max(180, geometry.size.width * 0.35), geometry.size.width * 0.5)
+                // Right-side Drop Zone: the right half of the editor. As soon as a dragged file crosses the
+                // 50% line, the half lights up with a "Drop here to split screen" hint.
+                let dropZoneWidth = SplitDropZone.zoneWidth(containerWidth: geometry.size.width)
 
                 HStack(spacing: 0) {
                     Spacer()
@@ -2934,10 +3032,10 @@ public struct SingleEditorContainerView: View {
                                     Image(systemName: "square.split.2x1")
                                         .font(.system(size: 34))
                                         .foregroundColor(.accentColor)
-                                    Text("Drop to Open Vertical Split")
+                                    Text("Drop here to split screen")
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundColor(.accentColor)
-                                    Text("Places file in Right Pane")
+                                    Text("The file opens in the right pane")
                                         .font(.system(size: 11))
                                         .foregroundColor(.secondary)
                                 }

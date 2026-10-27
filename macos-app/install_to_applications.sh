@@ -49,7 +49,34 @@ if command -v codesign >/dev/null 2>&1; then
     codesign --force --deep --sign - "${DEST_APP}" 2>/dev/null || true
 fi
 
-# 6. Re-register with macOS LaunchServices
+# 6. Make the app findable in Spotlight/Finder by related names (Note, NotePad, NPad, ...).
+#    Info.plist has no search-keyword key, so the words are stored as Spotlight keyword metadata on the bundle.
+#    This must run after `xattr -cr` above, which would otherwise wipe it.
+SEARCH_KEYWORDS=("Note" "Notes" "NotePad" "Notepad++" "NPad" "NPad++" "Text Editor" "Code Editor")
+if command -v python3 >/dev/null 2>&1 && command -v xattr >/dev/null 2>&1; then
+    KEYWORD_HEX=$(python3 -c 'import plistlib,sys; print(plistlib.dumps(sys.argv[1:], fmt=plistlib.FMT_BINARY).hex())' "${SEARCH_KEYWORDS[@]}")
+    xattr -wx com.apple.metadata:kMDItemKeywords "${KEYWORD_HEX}" "${DEST_APP}" 2>/dev/null || true
+    command -v mdimport >/dev/null 2>&1 && mdimport "${DEST_APP}" 2>/dev/null || true
+
+    # Spotlight indexes asynchronously; wait (up to ~30s) until the keywords are actually searchable.
+    if command -v mdfind >/dev/null 2>&1; then
+        INDEXED=false
+        for _ in $(seq 1 15); do
+            if mdfind -onlyin /Applications "kMDItemKeywords == 'NotePad*'cd" 2>/dev/null | grep -q "${BUNDLE_NAME}"; then
+                INDEXED=true
+                break
+            fi
+            sleep 2
+        done
+        if [ "${INDEXED}" = true ]; then
+            echo "Spotlight: NPad++ is searchable as Note / NotePad / NPad / NPad++."
+        else
+            echo "Spotlight: indexing not finished yet; alternate names should work shortly (try: mdimport ${DEST_APP})."
+        fi
+    fi
+fi
+
+# 7. Re-register with macOS LaunchServices
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 if [ -x "${LSREGISTER}" ]; then
     echo "Refreshing macOS LaunchServices database..."
