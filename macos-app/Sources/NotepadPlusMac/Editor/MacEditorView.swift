@@ -210,6 +210,12 @@ public struct MacEditorView: NSViewRepresentable {
         NotificationCenter.default.addObserver(
             lineRuler,
             selector: #selector(LineNumberRulerView.handleContentBoundsDidChange),
+            name: NSScrollView.didLiveScrollNotification,
+            object: scrollView
+        )
+        NotificationCenter.default.addObserver(
+            lineRuler,
+            selector: #selector(LineNumberRulerView.handleContentBoundsDidChange),
             name: NSText.didChangeNotification,
             object: textView
         )
@@ -1268,6 +1274,10 @@ public class LineNumberRulerView: NSRulerView {
         self.ruleThickness = 48.0
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     public override var isFlipped: Bool {
         return true
     }
@@ -1292,9 +1302,10 @@ public class LineNumberRulerView: NSRulerView {
             return
         }
 
-        let text = textView.string as NSString
-        let clickY = pointInRuler.y - textView.textContainerInset.height
+        let pointInTextView = textView.convert(pointInRuler, from: self)
+        let clickY = pointInTextView.y - textView.textContainerInset.height
 
+        let text = textView.string as NSString
         var targetLine = 1
         var currentLine = 1
         let fullRange = NSRange(location: 0, length: text.length)
@@ -1382,6 +1393,9 @@ public class LineNumberRulerView: NSRulerView {
         let activeLine = document?.cursorLine ?? 1
 
         if text.length == 0 {
+            let ptInTextView = NSPoint(x: 0, y: textView.textContainerInset.height)
+            let y = self.convert(ptInTextView, from: textView).y
+
             if self.appState?.showLineNumbers ?? true {
                 let numStr = "1" as NSString
                 let attrs: [NSAttributedString.Key: Any] = [
@@ -1389,12 +1403,12 @@ public class LineNumberRulerView: NSRulerView {
                     .foregroundColor: activeTheme.textColor
                 ]
                 let numSize = numStr.size(withAttributes: attrs)
-                let drawPoint = NSPoint(x: bounds.width - numSize.width - 8, y: textView.textContainerInset.height)
+                let drawPoint = NSPoint(x: bounds.width - numSize.width - 8, y: y)
                 numStr.draw(at: drawPoint, withAttributes: attrs)
             }
 
             if document?.bookmarks.contains(1) == true {
-                let dotRect = NSRect(x: 6, y: textView.textContainerInset.height + 3, width: 7, height: 7)
+                let dotRect = NSRect(x: 6, y: y + 3, width: 7, height: 7)
                 NSColor.systemBlue.setFill()
                 NSBezierPath(ovalIn: dotRect).fill()
             }
@@ -1403,13 +1417,25 @@ public class LineNumberRulerView: NSRulerView {
         }
 
         let visibleRect = textView.visibleRect
-        let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
+        var boundingRect = visibleRect
+        boundingRect.origin.x -= textView.textContainerOrigin.x
+        boundingRect.origin.y -= textView.textContainerOrigin.y
+        boundingRect.origin.y = max(0, boundingRect.origin.y - 20)
+        boundingRect.size.height += 40
+
+        let glyphRange = layoutManager.glyphRange(forBoundingRect: boundingRect, in: textContainer)
         let charRange = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+
+        let firstLineRange = text.lineRange(for: NSRange(location: charRange.location, length: 0))
+        let scanRange = NSRange(
+            location: firstLineRange.location,
+            length: min(text.length - firstLineRange.location, charRange.length + (charRange.location - firstLineRange.location))
+        )
 
         // Count lines before the visible range
         var lineNumber = 1
-        if charRange.location > 0 && charRange.location <= text.length {
-            text.enumerateSubstrings(in: NSRange(location: 0, length: charRange.location), options: [.byLines, .substringNotRequired]) { _, _, _, _ in
+        if scanRange.location > 0 && scanRange.location <= text.length {
+            text.enumerateSubstrings(in: NSRange(location: 0, length: scanRange.location), options: [.byLines, .substringNotRequired]) { _, _, _, _ in
                 lineNumber += 1
             }
         }
@@ -1419,15 +1445,24 @@ public class LineNumberRulerView: NSRulerView {
         let neededDigits = "\(totalLinesEstimate)".count
         let minThickness = CGFloat(max(48, neededDigits * 9 + 20))
         if abs(self.ruleThickness - minThickness) > 6 {
-            self.ruleThickness = minThickness
+            DispatchQueue.main.async { [weak self] in
+                self?.ruleThickness = minThickness
+            }
         }
 
         // Draw line numbers and bookmark indicators for visible lines
-        text.enumerateSubstrings(in: charRange, options: [.byLines, .substringNotRequired]) { [weak self] _, subRange, _, _ in
+        text.enumerateSubstrings(in: scanRange, options: [.byLines, .substringNotRequired]) { [weak self] _, subRange, _, _ in
             guard let self = self else { return }
             let glyphIndex = layoutManager.glyphIndexForCharacter(at: subRange.location)
             let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
-            let y = lineRect.origin.y + textView.textContainerInset.height
+
+            let ptInTextView = NSPoint(x: 0, y: lineRect.origin.y + textView.textContainerInset.height)
+            let y = self.convert(ptInTextView, from: textView).y
+
+            guard y + lineRect.height >= 0 && y <= self.bounds.height else {
+                lineNumber += 1
+                return
+            }
 
             let isCurrent = (lineNumber == activeLine)
             let isBookmarked = self.document?.bookmarks.contains(lineNumber) == true
@@ -1506,8 +1541,10 @@ public class LineNumberRulerView: NSRulerView {
                 extraRect = NSRect(x: lastRect.origin.x, y: lastRect.maxY, width: lastRect.width, height: max(lastRect.height, 18))
             }
 
-            let y = extraRect.origin.y + textView.textContainerInset.height
-            if (y + extraRect.height >= visibleRect.minY && y <= visibleRect.maxY) || visibleRect.intersects(extraRect) || extraRect.minY <= visibleRect.maxY {
+            let ptInTextView = NSPoint(x: 0, y: extraRect.origin.y + textView.textContainerInset.height)
+            let y = self.convert(ptInTextView, from: textView).y
+
+            if y + extraRect.height >= 0 && y <= bounds.height {
                 let isCurrent = (lineNumber == activeLine)
                 let isBookmarked = self.document?.bookmarks.contains(lineNumber) == true
 
