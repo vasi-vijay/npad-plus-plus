@@ -24,21 +24,15 @@ public class CodePadScrollView: NSScrollView {
 
     public override func hitTest(_ point: NSPoint) -> NSView? {
         if let vs = verticalScroller, !vs.isHidden, vs.frame.contains(point) {
-            let ptInScroller = vs.convert(point, from: self)
-            return vs.hitTest(ptInScroller) ?? vs
+            return vs
         }
         if let hs = horizontalScroller, !hs.isHidden, hs.frame.contains(point) {
-            let ptInScroller = hs.convert(point, from: self)
-            return hs.hitTest(ptInScroller) ?? hs
+            return hs
         }
         if let vr = verticalRulerView, !vr.isHidden, vr.frame.contains(point) {
-            let ptInRuler = vr.convert(point, from: self)
-            return vr.hitTest(ptInRuler) ?? vr
+            return vr
         }
         let hit = super.hitTest(point)
-        if hit === verticalScroller || hit === horizontalScroller || hit === verticalRulerView || hit === horizontalRulerView {
-            return hit
-        }
         if hit === contentView || hit === self {
             return editorTextView ?? hit
         }
@@ -91,6 +85,7 @@ public struct MacEditorView: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
         scrollView.backgroundColor = NSColor.textBackgroundColor
+        scrollView.scrollerStyle = .legacy
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = !wordWrap
         scrollView.autohidesScrollers = false
@@ -261,9 +256,10 @@ public struct MacEditorView: NSViewRepresentable {
         }
 
         // Ensure text view fills entire clip view so clicks below/right of text immediately focus the editor
+        scrollView.postsFrameChangedNotifications = true
         NotificationCenter.default.addObserver(
-            forName: NSView.boundsDidChangeNotification,
-            object: scrollView.contentView,
+            forName: NSView.frameDidChangeNotification,
+            object: scrollView,
             queue: .main
         ) { [weak textView, weak scrollView] _ in
             guard let tv = textView, let sv = scrollView else { return }
@@ -295,6 +291,10 @@ public struct MacEditorView: NSViewRepresentable {
 
     public func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.parent = self
+
+        if nsView.scrollerStyle != .legacy {
+            nsView.scrollerStyle = .legacy
+        }
 
         guard let textView = nsView.documentView as? NSTextView else { return }
 
@@ -1676,19 +1676,22 @@ public class LineNumberRulerView: NSRulerView {
             length: min(text.length - firstLineRange.location, charRange.length + (charRange.location - firstLineRange.location))
         )
 
-        // Count lines before the visible range
+        // Count lines before the visible range using fast newline scan
         var lineNumber = 1
-        if scanRange.location > 0 && scanRange.location <= text.length {
-            text.enumerateSubstrings(in: NSRange(location: 0, length: scanRange.location), options: [.byLines, .substringNotRequired]) { _, _, _, _ in
-                lineNumber += 1
+        let scanLimit = min(scanRange.location, text.length)
+        if scanLimit > 0 {
+            for i in 0..<scanLimit {
+                if text.character(at: i) == 0x0A {
+                    lineNumber += 1
+                }
             }
         }
 
-        // Dynamically adjust ruler thickness for large documents
-        let totalLinesEstimate = max(lineNumber + 50, 100)
-        let neededDigits = "\(totalLinesEstimate)".count
+        // Keep ruler thickness stable for document length so dragging scroll bar never triggers mid-scroll tile()
+        let totalLines = max(lineNumber + 50, document?.cursorLine ?? 1, 100)
+        let neededDigits = "\(totalLines)".count
         let minThickness = CGFloat(max(48, neededDigits * 9 + 20))
-        if abs(self.ruleThickness - minThickness) > 6 {
+        if minThickness > self.ruleThickness {
             DispatchQueue.main.async { [weak self] in
                 self?.ruleThickness = minThickness
             }
