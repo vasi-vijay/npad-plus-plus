@@ -23,16 +23,20 @@ public class CodePadScrollView: NSScrollView {
     }
 
     public override func hitTest(_ point: NSPoint) -> NSView? {
-        if let vs = verticalScroller, !vs.isHidden, vs.frame.contains(point) {
+        let localPoint = self.convert(point, from: self.superview)
+        if let vs = verticalScroller, !vs.isHidden, vs.frame.contains(localPoint) {
             return vs
         }
-        if let hs = horizontalScroller, !hs.isHidden, hs.frame.contains(point) {
+        if let hs = horizontalScroller, !hs.isHidden, hs.frame.contains(localPoint) {
             return hs
         }
-        if let vr = verticalRulerView, !vr.isHidden, vr.frame.contains(point) {
+        if let vr = verticalRulerView, !vr.isHidden, vr.frame.contains(localPoint) {
             return vr
         }
         let hit = super.hitTest(point)
+        if hit === verticalScroller || hit === horizontalScroller || hit === verticalRulerView {
+            return hit
+        }
         if hit === contentView || hit === self {
             return editorTextView ?? hit
         }
