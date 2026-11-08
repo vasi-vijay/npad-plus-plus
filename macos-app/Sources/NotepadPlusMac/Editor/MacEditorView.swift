@@ -1103,8 +1103,14 @@ public class CodePadTextView: NSTextView {
             return
         }
 
-        // Duplicate Line via Control+D or Command+D
+        // Delete Line via Control+D or Command+D
         if (flags == .control || flags == .command) && event.charactersIgnoringModifiers?.lowercased() == "d" {
+            deleteCurrentLine()
+            return
+        }
+
+        // Duplicate Line via Command+Shift+D or Control+Shift+D
+        if (flags == [.command, .shift] || flags == [.control, .shift]) && event.charactersIgnoringModifiers?.lowercased() == "d" {
             duplicateLine()
             return
         }
@@ -1206,15 +1212,15 @@ public class CodePadTextView: NSTextView {
                     return true
                 }
                 if chars == "d" {
-                    EditorDiagnostics.log("performKeyEquivalent: Duplicate Line via Command+D")
-                    duplicateLine()
+                    EditorDiagnostics.log("performKeyEquivalent: Delete Line via Command+D")
+                    deleteCurrentLine()
                     return true
                 }
             }
         } else if flags == .control {
             if let chars = event.charactersIgnoringModifiers?.lowercased(), chars == "d" {
-                EditorDiagnostics.log("performKeyEquivalent: Duplicate Line via Control+D")
-                duplicateLine()
+                EditorDiagnostics.log("performKeyEquivalent: Delete Line via Control+D")
+                deleteCurrentLine()
                 return true
             }
         } else if flags == [.command, .shift] {
@@ -1229,6 +1235,12 @@ public class CodePadTextView: NSTextView {
                     duplicateLine()
                     return true
                 }
+            }
+        } else if flags == [.control, .shift] {
+            if let chars = event.charactersIgnoringModifiers?.lowercased(), chars == "d" {
+                EditorDiagnostics.log("performKeyEquivalent: Duplicate Line via Shift+Control+D")
+                duplicateLine()
+                return true
             }
         }
         return super.performKeyEquivalent(with: event)
@@ -1320,7 +1332,42 @@ public class CodePadTextView: NSTextView {
         }
     }
 
-    // MARK: - Line Operations: Duplicate Line & Indented Newline
+    // MARK: - Line Operations: Delete Line, Duplicate Line & Indented Newline
+    public func deleteCurrentLine() {
+        completionController.dismiss()
+        guard isEditable, textStorage != nil else { return }
+        let nsText = (self.string as NSString)
+        guard nsText.length > 0 else { return }
+
+        let sel = selectedRange()
+        let lineRange = nsText.lineRange(for: NSRange(location: sel.location, length: 0))
+        let colOffset = sel.location - lineRange.lowerBound
+
+        if shouldChangeText(in: lineRange, replacementString: "") {
+            replaceCharacters(in: lineRange, with: "")
+            didChangeText()
+
+            let updatedText = (self.string as NSString)
+            if updatedText.length == 0 {
+                setSelectedRange(NSRange(location: 0, length: 0))
+            } else {
+                let targetLoc = min(lineRange.lowerBound, updatedText.length - 1)
+                let newLineRange = updatedText.lineRange(for: NSRange(location: max(0, targetLoc), length: 0))
+                var lineLengthExcludingNewline = newLineRange.length
+                if lineLengthExcludingNewline > 0 && updatedText.character(at: newLineRange.upperBound - 1) == 0x0A {
+                    lineLengthExcludingNewline -= 1
+                    if lineLengthExcludingNewline > 0 && updatedText.character(at: newLineRange.lowerBound + lineLengthExcludingNewline - 1) == 0x0D {
+                        lineLengthExcludingNewline -= 1
+                    }
+                }
+                let newCol = min(colOffset, max(0, lineLengthExcludingNewline))
+                let newCursor = min(updatedText.length, newLineRange.lowerBound + newCol)
+                setSelectedRange(NSRange(location: newCursor, length: 0))
+            }
+            scrollRangeToVisible(selectedRange())
+        }
+    }
+
     public func duplicateLine() {
         completionController.dismiss()
         guard isEditable, textStorage != nil else { return }

@@ -1902,15 +1902,23 @@ public struct EditCommands: Commands {
 
             Divider()
 
-            Button("Duplicate Line") {
-                appState.duplicateCurrentLine()
+            Button("Delete Line") {
+                if let tv = NSApp.keyWindow?.firstResponder as? CodePadTextView {
+                    tv.deleteCurrentLine()
+                } else {
+                    appState.deleteCurrentLine()
+                }
             }
             .keyboardShortcut("d", modifiers: .command)
 
-            Button("Delete Line") {
-                appState.deleteCurrentLine()
+            Button("Duplicate Line") {
+                if let tv = NSApp.keyWindow?.firstResponder as? CodePadTextView {
+                    tv.duplicateLine()
+                } else {
+                    appState.duplicateCurrentLine()
+                }
             }
-            .keyboardShortcut("k", modifiers: [.command, .shift])
+            .keyboardShortcut("d", modifiers: [.command, .shift])
 
             Button("Join Lines") {
                 appState.joinLines()
