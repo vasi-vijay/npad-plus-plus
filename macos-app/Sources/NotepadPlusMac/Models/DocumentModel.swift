@@ -796,6 +796,14 @@ public class AppStateManager: ObservableObject {
         didSet { editorActionSubject.send(.themeChanged) }
     }
 
+    // Auto-Completion Feature Toggle (Macro-free)
+    private static let kAutoCompleteEnabled = "npad_autoCompleteEnabled"
+    @Published public var isAutoCompleteEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(isAutoCompleteEnabled, forKey: Self.kAutoCompleteEnabled)
+        }
+    }
+
     // Modal Sheets
     @Published public var showDocumentationSheet: Bool = false
 
@@ -1158,6 +1166,12 @@ public class AppStateManager: ObservableObject {
 
         if let savedColor = UserDefaults.standard.string(forKey: kMarkColor) {
             self.activeMarkColor = MarkPalette.canonical(savedColor)
+        }
+
+        if UserDefaults.standard.object(forKey: Self.kAutoCompleteEnabled) != nil {
+            self.isAutoCompleteEnabled = UserDefaults.standard.bool(forKey: Self.kAutoCompleteEnabled)
+        } else {
+            self.isAutoCompleteEnabled = true
         }
 
         // In Auto mode the theme always matches the system appearance at launch, so a stale theme (or a system
@@ -1971,6 +1985,7 @@ public class AppStateManager: ObservableObject {
         case diffUpdated
         case scrollToDifference(DiffChunk)
         case synchronizedScroll(senderPane: EditorPaneSide, scrollRatio: CGFloat)
+        case triggerAutoComplete
     }
 
     public var isDarkMode: Bool {
@@ -2066,6 +2081,10 @@ public class AppStateManager: ObservableObject {
         doc.clearAllMarks()
         editorActionSubject.send(.marksChanged)
         scheduleSessionSave()
+    }
+
+    public func triggerAutoComplete() {
+        editorActionSubject.send(.triggerAutoComplete)
     }
 
     // MARK: - Language Mode Changing

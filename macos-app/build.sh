@@ -57,6 +57,7 @@ if command -v swiftc >/dev/null 2>&1; then
         Sources/NotepadPlusMac/Models/PluginModel.swift \
         Sources/NotepadPlusMac/Models/PluginStore.swift \
         Sources/NotepadPlusMac/Editor/SyntaxEngine.swift \
+        Sources/NotepadPlusMac/Editor/CodeCompletionEngine.swift \
         Sources/NotepadPlusMac/Editor/MacEditorView.swift \
         Sources/NotepadPlusMac/Views/ProjectExplorerView.swift \
         Sources/NotepadPlusMac/Views/PluginManagerView.swift \

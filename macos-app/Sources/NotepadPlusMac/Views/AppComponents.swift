@@ -1306,6 +1306,24 @@ public struct EditorStatusBar: View {
                 .cornerRadius(3)
             }
 
+            // Auto-Completion Indicator & Toggle
+            Button(action: {
+                appState.isAutoCompleteEnabled.toggle()
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: appState.isAutoCompleteEnabled ? "sparkles" : "sparkles.slash")
+                        .font(.system(size: 10))
+                        .foregroundColor(appState.isAutoCompleteEnabled ? .accentColor : .secondary)
+                    Text(appState.isAutoCompleteEnabled ? "Suggest: ON" : "Suggest: OFF")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(appState.isAutoCompleteEnabled ? .accentColor : .secondary)
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+            }
+            .buttonStyle(.plain)
+            .help(appState.isAutoCompleteEnabled ? "Auto-Completion from Document is ON (Click to Disable)" : "Auto-Completion from Document is OFF (Click to Enable)")
+
             // Quick Appearance Switcher
             Button(action: {
                 switch appState.appearanceMode {
@@ -1903,6 +1921,17 @@ public struct EditCommands: Commands {
                 appState.toggleComment()
             }
             .keyboardShortcut("/", modifiers: .command)
+
+            Divider()
+
+            Button(appState.isAutoCompleteEnabled ? "Disable Auto-Completion" : "Enable Auto-Completion") {
+                appState.isAutoCompleteEnabled.toggle()
+            }
+
+            Button("Show Code Suggestions") {
+                appState.triggerAutoComplete()
+            }
+            .keyboardShortcut(.init(Character(UnicodeScalar(0x1B)!)), modifiers: .option)
         }
     }
 }
@@ -2034,6 +2063,8 @@ public struct ViewCommands: Commands {
             Toggle("Show Whitespace", isOn: $appState.showWhitespace)
 
             Toggle("Syntax Highlighting", isOn: $appState.syntaxHighlightingEnabled)
+
+            Toggle("Auto-Completion (From Document)", isOn: $appState.isAutoCompleteEnabled)
 
             Divider()
 

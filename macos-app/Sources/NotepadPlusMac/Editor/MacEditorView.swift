@@ -44,10 +44,16 @@ public class CodePadScrollView: NSScrollView {
     }
 
     public override func mouseDown(with event: NSEvent) {
+        (editorTextView as? CodePadTextView)?.completionController.dismiss()
         if let tv = editorTextView ?? (documentView as? NSTextView) {
             window?.makeFirstResponder(tv)
         }
         super.mouseDown(with: event)
+    }
+
+    public override func scrollWheel(with event: NSEvent) {
+        (editorTextView as? CodePadTextView)?.completionController.dismiss()
+        super.scrollWheel(with: event)
     }
 }
 
@@ -639,6 +645,11 @@ public struct MacEditorView: NSViewRepresentable {
                 DispatchQueue.main.async { [weak self] in
                     self?.isSynchronizingScroll = false
                 }
+
+            case .triggerAutoComplete:
+                DispatchQueue.main.async { [weak textView] in
+                    (textView as? CodePadTextView)?.evaluateAutoCompletions(manually: true)
+                }
             }
         }
 
@@ -835,6 +846,16 @@ public class CodePadTextView: NSTextView {
     public weak var appState: AppStateManager?
     public weak var document: EditorDocument?
     public var paneSide: EditorPaneSide? = nil
+    public let completionController = CodeCompletionController()
+
+    deinit {
+        completionController.dismiss()
+    }
+
+    public override func scrollWheel(with event: NSEvent) {
+        completionController.dismiss()
+        super.scrollWheel(with: event)
+    }
 
     public override var acceptsFirstResponder: Bool {
         return true
@@ -886,6 +907,7 @@ public class CodePadTextView: NSTextView {
     }
 
     public override func resignFirstResponder() -> Bool {
+        completionController.dismiss()
         let ok = super.resignFirstResponder()
         EditorDiagnostics.log("resignFirstResponder: \(ok), doc=\(document?.title ?? "")")
         needsDisplay = true
@@ -893,6 +915,7 @@ public class CodePadTextView: NSTextView {
     }
 
     public override func mouseDown(with event: NSEvent) {
+        completionController.dismiss()
         EditorDiagnostics.log("mouseDown at \(event.locationInWindow), isEditable=\(isEditable), isKeyWindow=\(window?.isKeyWindow ?? false)")
         if let side = paneSide, let app = appState {
             app.activePane = side
@@ -1029,11 +1052,56 @@ public class CodePadTextView: NSTextView {
         EditorDiagnostics.log("insertText: len=\(strLen), range=\(replacementRange)")
         super.insertText(string, replacementRange: replacementRange)
         needsDisplay = true
+
+        if let appState = appState, appState.isAutoCompleteEnabled {
+            DispatchQueue.main.async { [weak self] in
+                self?.evaluateAutoCompletions(manually: false)
+            }
+        } else {
+            completionController.dismiss()
+        }
+    }
+
+    public override func deleteBackward(_ sender: Any?) {
+        super.deleteBackward(sender)
+        if let appState = appState, appState.isAutoCompleteEnabled {
+            DispatchQueue.main.async { [weak self] in
+                self?.evaluateAutoCompletions(manually: false)
+            }
+        } else {
+            completionController.dismiss()
+        }
     }
 
     public override func keyDown(with event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         EditorDiagnostics.log("keyDown: code=\(event.keyCode), chars='\(event.characters ?? "")', isEditable=\(isEditable)")
+
+        // Auto-completion popup navigation and commit
+        if completionController.isVisible {
+            if event.keyCode == 126 { // Up Arrow
+                completionController.selectPrevious()
+                return
+            }
+            if event.keyCode == 125 { // Down Arrow
+                completionController.selectNext()
+                return
+            }
+            if event.keyCode == 48 || event.keyCode == 36 || event.keyCode == 76 { // Tab, Return, Keypad Enter
+                completionController.commitSelected()
+                return
+            }
+            if event.keyCode == 53 { // Escape
+                completionController.dismiss()
+                return
+            }
+        }
+
+        // Manual suggestion trigger: Option+Escape (53) or Control+Space (49)
+        if (flags == .option && event.keyCode == 53) || (flags == .control && event.keyCode == 49) {
+            evaluateAutoCompletions(manually: true)
+            return
+        }
 
         // Duplicate Line via Control+D or Command+D
         if (flags == .control || flags == .command) && event.charactersIgnoringModifiers?.lowercased() == "d" {
@@ -1053,6 +1121,71 @@ public class CodePadTextView: NSTextView {
         }
 
         super.keyDown(with: event)
+    }
+
+    // MARK: - Auto-Completion Evaluation & Application
+    public func evaluateAutoCompletions(manually: Bool = false) {
+        guard let window = self.window, window.isKeyWindow else {
+            completionController.dismiss()
+            return
+        }
+        guard isEditable else {
+            completionController.dismiss()
+            return
+        }
+        if !manually {
+            guard let appState = appState, appState.isAutoCompleteEnabled else {
+                completionController.dismiss()
+                return
+            }
+        }
+
+        let sel = selectedRange()
+        guard sel.length == 0 else {
+            completionController.dismiss()
+            return
+        }
+
+        let fullText = self.string
+        guard let prefixInfo = CodeCompletionEngine.findPrefix(in: fullText, at: sel.location) else {
+            completionController.dismiss()
+            return
+        }
+
+        let matches = CodeCompletionEngine.findMatches(
+            prefix: prefixInfo.prefix,
+            in: fullText,
+            excludingRange: prefixInfo.range
+        )
+
+        guard !matches.isEmpty else {
+            completionController.dismiss()
+            return
+        }
+
+        let isDark = appState?.isDarkMode ?? false
+        completionController.showCompletions(
+            candidates: matches,
+            prefix: prefixInfo.prefix,
+            prefixRange: prefixInfo.range,
+            for: self,
+            isDark: isDark
+        ) { [weak self] chosenWord, range in
+            self?.applyCompletion(word: chosenWord, range: range)
+        }
+    }
+
+    public func applyCompletion(word: String, range: NSRange) {
+        let nsLen = (self.string as NSString).length
+        guard range.location != NSNotFound, range.location + range.length <= nsLen else {
+            completionController.dismiss()
+            return
+        }
+        if shouldChangeText(in: range, replacementString: word) {
+            replaceCharacters(in: range, with: word)
+            didChangeText()
+        }
+        completionController.dismiss()
     }
 
     public override func insertNewline(_ sender: Any?) {
@@ -1189,6 +1322,7 @@ public class CodePadTextView: NSTextView {
 
     // MARK: - Line Operations: Duplicate Line & Indented Newline
     public func duplicateLine() {
+        completionController.dismiss()
         guard isEditable, textStorage != nil else { return }
         let nsText = (self.string as NSString)
         guard nsText.length > 0 else { return }
@@ -1213,6 +1347,7 @@ public class CodePadTextView: NSTextView {
     }
 
     public func insertIndentedNewline(moveBelow: Bool) {
+        completionController.dismiss()
         guard isEditable, textStorage != nil else {
             super.insertNewline(nil)
             return
