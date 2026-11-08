@@ -3034,44 +3034,44 @@ public struct SingleEditorContainerView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                // Right-side Drop Zone: the right half of the editor. As soon as a dragged file crosses the
-                // 50% line, the half lights up with a "Drop here to split screen" hint.
-                let dropZoneWidth = SplitDropZone.zoneWidth(containerWidth: geometry.size.width)
+                // Right-side Drop Zone: active only when a tab or file is being dragged
+                if appState.draggingDocumentId != nil || appState.isSingleEditorDragOverRight {
+                    let dropZoneWidth = SplitDropZone.zoneWidth(containerWidth: geometry.size.width)
 
-                HStack(spacing: 0) {
-                    Spacer()
-                    ZStack {
-                        if appState.isSingleEditorDragOverRight {
-                            ZStack {
-                                Color.accentColor.opacity(0.12)
-                                VStack(spacing: 10) {
-                                    Image(systemName: "square.split.2x1")
-                                        .font(.system(size: 34))
-                                        .foregroundColor(.accentColor)
-                                    Text("Drop here to split screen")
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundColor(.accentColor)
-                                    Text("The file opens in the right pane")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
+                    HStack(spacing: 0) {
+                        Spacer()
+                        ZStack {
+                            if appState.isSingleEditorDragOverRight {
+                                ZStack {
+                                    Color.accentColor.opacity(0.12)
+                                    VStack(spacing: 10) {
+                                        Image(systemName: "square.split.2x1")
+                                            .font(.system(size: 34))
+                                            .foregroundColor(.accentColor)
+                                        Text("Drop here to split screen")
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundColor(.accentColor)
+                                        Text("The file opens in the right pane")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(16)
                                 }
-                                .padding(16)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(Color.accentColor, lineWidth: 2)
+                                )
+                                .padding(8)
+                            } else {
+                                Color.clear
                             }
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.accentColor, lineWidth: 2)
-                            )
-                            .padding(8)
-                        } else {
-                            Color.clear
                         }
-                    }
-                    .frame(width: dropZoneWidth, height: geometry.size.height)
-                    .contentShape(Rectangle())
-                    .onDrop(of: ["public.file-url", "public.text"], isTargeted: Binding(
-                        get: { appState.isSingleEditorDragOverRight },
-                        set: { val in appState.isSingleEditorDragOverRight = val }
-                    )) { providers in
+                        .frame(width: dropZoneWidth, height: geometry.size.height)
+                        .contentShape(Rectangle())
+                        .onDrop(of: ["public.file-url", "public.text"], isTargeted: Binding(
+                            get: { appState.isSingleEditorDragOverRight },
+                            set: { val in appState.isSingleEditorDragOverRight = val }
+                        )) { providers in
                         appState.isSingleEditorDragOverRight = false
                         if let draggingId = appState.draggingDocumentId {
                             appState.splitWithDocument(id: draggingId, to: .right)
@@ -3102,6 +3102,7 @@ public struct SingleEditorContainerView: View {
                         return false
                     }
                 }
+            }
             }
         }
     }
@@ -3239,10 +3240,6 @@ public struct EditorPaneView: View {
                 )
                 .id(doc.id)
                 .frame(minWidth: 150, maxWidth: .infinity, minHeight: 200, maxHeight: .infinity)
-                .onTapGesture {
-                    appState.activePane = paneSide
-                    appState.activeDocumentId = doc.id
-                }
                 .overlay(
                     Group {
                         if (paneSide == .left ? appState.isPaneDragOverLeft : appState.isPaneDragOverRight) {
