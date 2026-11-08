@@ -2468,9 +2468,10 @@ public class AppStateManager: ObservableObject {
         var newLines = lines
         newLines.insert(lines[targetIdx], at: targetIdx + 1)
         let newContent = newLines.joined(separator: "\n")
-        let newLoc = doc.characterIndex(forLine: savedLine, column: savedCol, in: newContent)
+        let newLine = min(savedLine + 1, newLines.count)
+        let newLoc = doc.characterIndex(forLine: newLine, column: savedCol, in: newContent)
         doc.applyEdit(newContent, newSelectedRange: NSRange(location: newLoc, length: 0), actionName: "Duplicate Line")
-        doc.cursorLine = savedLine
+        doc.cursorLine = newLine
         doc.cursorColumn = savedCol
         scheduleSessionSave()
     }

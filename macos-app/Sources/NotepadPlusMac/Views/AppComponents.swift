@@ -1887,12 +1887,12 @@ public struct EditCommands: Commands {
             Button("Duplicate Line") {
                 appState.duplicateCurrentLine()
             }
-            .keyboardShortcut("d", modifiers: [.command, .shift])
+            .keyboardShortcut("d", modifiers: .command)
 
             Button("Delete Line") {
                 appState.deleteCurrentLine()
             }
-            .keyboardShortcut("d", modifiers: .command)
+            .keyboardShortcut("k", modifiers: [.command, .shift])
 
             Button("Join Lines") {
                 appState.joinLines()

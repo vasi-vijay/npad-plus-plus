@@ -20,10 +20,21 @@ public class CodePadScrollView: NSScrollView {
 
     public override func resetCursorRects() {
         super.resetCursorRects()
-        addCursorRect(bounds, cursor: .iBeam)
     }
 
     public override func hitTest(_ point: NSPoint) -> NSView? {
+        if let vs = verticalScroller, !vs.isHidden, vs.frame.contains(point) {
+            let ptInScroller = vs.convert(point, from: self)
+            return vs.hitTest(ptInScroller) ?? vs
+        }
+        if let hs = horizontalScroller, !hs.isHidden, hs.frame.contains(point) {
+            let ptInScroller = hs.convert(point, from: self)
+            return hs.hitTest(ptInScroller) ?? hs
+        }
+        if let vr = verticalRulerView, !vr.isHidden, vr.frame.contains(point) {
+            let ptInRuler = vr.convert(point, from: self)
+            return vr.hitTest(ptInRuler) ?? vr
+        }
         let hit = super.hitTest(point)
         if hit === verticalScroller || hit === horizontalScroller || hit === verticalRulerView || hit === horizontalRulerView {
             return hit
@@ -81,8 +92,9 @@ public struct MacEditorView: NSViewRepresentable {
         scrollView.drawsBackground = true
         scrollView.backgroundColor = NSColor.textBackgroundColor
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
-        scrollView.autohidesScrollers = true
+        scrollView.hasHorizontalScroller = !wordWrap
+        scrollView.autohidesScrollers = false
+        scrollView.scrollerKnobStyle = appState.isDarkMode ? .light : .dark
 
         let baseWidth: CGFloat = max(scrollView.contentSize.width, 1000)
         let baseHeight: CGFloat = max(scrollView.contentSize.height, 800)
@@ -176,6 +188,15 @@ public struct MacEditorView: NSViewRepresentable {
             .foregroundColor: activeTheme.textColor
         ]
 
+        // Ensure text layout and scrollbars are accurately initialized
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        let minW = scrollView.contentSize.width
+        let minH = scrollView.contentSize.height
+        let targetW = wordWrap ? minW : max(minW, usedRect.width + textView.textContainerInset.width * 2 + 20)
+        let targetH = max(minH, usedRect.height + textView.textContainerInset.height * 2)
+        textView.frame = NSRect(x: 0, y: 0, width: targetW, height: targetH)
+
         // Restore document selection if valid
         let nsLen = (document.content as NSString).length
         if document.selectedRange.location + document.selectedRange.length <= nsLen {
@@ -184,6 +205,7 @@ public struct MacEditorView: NSViewRepresentable {
 
         // 7. Mount document view into scroll view
         scrollView.documentView = textView
+        scrollView.reflectScrolledClipView(scrollView.contentView)
 
         // Restore scroll position
         if document.scrollOrigin != .zero {
@@ -312,6 +334,7 @@ public struct MacEditorView: NSViewRepresentable {
             context.coordinator.currentThemeName = appState.theme
             context.coordinator.currentSyntaxEnabled = appState.syntaxHighlightingEnabled
             context.coordinator.currentShowLineNumbers = appState.showLineNumbers
+            nsView.scrollerKnobStyle = isDark ? .light : .dark
             let sel = textView.selectedRange()
             textView.backgroundColor = activeTheme.backgroundColor
             textView.textColor = activeTheme.textColor
@@ -357,14 +380,22 @@ public struct MacEditorView: NSViewRepresentable {
         // E. Sync if content was modified externally (file open, tab switch, plugin)
         if !context.coordinator.isUpdating && textView.string != document.content {
             context.coordinator.isUpdating = true
+            let wanted = document.selectedRange
             textView.string = document.content
             if let storage = textView.textStorage {
                 SyntaxEngine.highlight(storage: storage, language: document.language, baseFont: font, isDark: isDark)
             }
-            // The model's selection is authoritative: edits made through commands (delete/duplicate line, plugins)
-            // set it deliberately, whereas the view's previous selection is stale after the string is replaced.
+            if let layoutManager = textView.layoutManager, let textContainer = textView.textContainer {
+                layoutManager.ensureLayout(for: textContainer)
+                let usedRect = layoutManager.usedRect(for: textContainer)
+                let minW = nsView.contentSize.width
+                let minH = nsView.contentSize.height
+                let targetW = wordWrap ? minW : max(minW, usedRect.width + textView.textContainerInset.width * 2 + 20)
+                let targetH = max(minH, usedRect.height + textView.textContainerInset.height * 2)
+                textView.frame = NSRect(x: 0, y: 0, width: targetW, height: targetH)
+                nsView.reflectScrolledClipView(nsView.contentView)
+            }
             let newLength = (textView.string as NSString).length
-            let wanted = document.selectedRange
             if wanted.location + wanted.length <= newLength {
                 textView.setSelectedRange(wanted)
             } else {
@@ -770,7 +801,7 @@ public struct MacEditorView: NSViewRepresentable {
         }
 
         public func textViewDidChangeSelection(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
+            guard !isUpdating, let textView = notification.object as? NSTextView else { return }
             let sel = textView.selectedRange()
             let text = textView.string as NSString
 
@@ -997,26 +1028,239 @@ public class CodePadTextView: NSTextView {
     }
 
     public override func keyDown(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         EditorDiagnostics.log("keyDown: code=\(event.keyCode), chars='\(event.characters ?? "")', isEditable=\(isEditable)")
+
+        // Duplicate Line via Control+D or Command+D
+        if (flags == .control || flags == .command) && event.charactersIgnoringModifiers?.lowercased() == "d" {
+            duplicateLine()
+            return
+        }
+
+        // Return (36) or Keypad Enter (76)
+        if event.keyCode == 36 || event.keyCode == 76 {
+            if flags.contains(.shift) {
+                insertIndentedNewline(moveBelow: true)
+                return
+            } else if flags.isEmpty {
+                insertIndentedNewline(moveBelow: false)
+                return
+            }
+        }
+
         super.keyDown(with: event)
+    }
+
+    public override func insertNewline(_ sender: Any?) {
+        insertIndentedNewline(moveBelow: false)
+    }
+
+    public override func insertLineBreak(_ sender: Any?) {
+        insertIndentedNewline(moveBelow: true)
     }
 
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if flags == .command {
-            if let chars = event.charactersIgnoringModifiers?.lowercased(), chars == "y" {
-                EditorDiagnostics.log("performKeyEquivalent: Redo via Command+Y")
-                appState?.redoActiveDocument()
+            if let chars = event.charactersIgnoringModifiers?.lowercased() {
+                if chars == "y" {
+                    EditorDiagnostics.log("performKeyEquivalent: Redo via Command+Y")
+                    appState?.redoActiveDocument()
+                    return true
+                }
+                if chars == "d" {
+                    EditorDiagnostics.log("performKeyEquivalent: Duplicate Line via Command+D")
+                    duplicateLine()
+                    return true
+                }
+            }
+        } else if flags == .control {
+            if let chars = event.charactersIgnoringModifiers?.lowercased(), chars == "d" {
+                EditorDiagnostics.log("performKeyEquivalent: Duplicate Line via Control+D")
+                duplicateLine()
                 return true
             }
         } else if flags == [.command, .shift] {
-            if let chars = event.charactersIgnoringModifiers?.lowercased(), chars == "z" {
-                EditorDiagnostics.log("performKeyEquivalent: Redo via Shift+Command+Z")
-                appState?.redoActiveDocument()
-                return true
+            if let chars = event.charactersIgnoringModifiers?.lowercased() {
+                if chars == "z" {
+                    EditorDiagnostics.log("performKeyEquivalent: Redo via Shift+Command+Z")
+                    appState?.redoActiveDocument()
+                    return true
+                }
+                if chars == "d" {
+                    EditorDiagnostics.log("performKeyEquivalent: Duplicate Line via Shift+Command+D")
+                    duplicateLine()
+                    return true
+                }
             }
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    // MARK: - Code Word Selection (Double Click & Drag)
+    private enum CharType {
+        case word
+        case whitespace
+        case newline
+        case delimiter
+        case punctuation
+    }
+
+    private func classifyChar(_ ch: unichar) -> CharType {
+        if ch == 0x0A || ch == 0x0D {
+            return .newline
+        }
+        guard let scalar = UnicodeScalar(ch) else { return .punctuation }
+        if CharacterSet.whitespaces.contains(scalar) {
+            return .whitespace
+        }
+        if CharacterSet.alphanumerics.contains(scalar) || ch == 0x5F /* _ */ || ch == 0x24 /* $ */ {
+            return .word
+        }
+        let delims: Set<unichar> = [0x28 /* ( */, 0x29 /* ) */, 0x5B /* [ */, 0x5D /* ] */, 0x7B /* { */, 0x7D /* } */, 0x22 /* " */, 0x27 /* '\'' */, 0x60 /* ` */, 0x3B /* ; */, 0x2C /* , */]
+        if delims.contains(ch) {
+            return .delimiter
+        }
+        return .punctuation
+    }
+
+    private func tokenRange(at index: Int, in str: NSString) -> NSRange {
+        guard str.length > 0 else { return NSRange(location: 0, length: 0) }
+        var pos = max(0, min(index, str.length - 1))
+
+        if (index >= str.length || classifyChar(str.character(at: pos)) == .newline) && index > 0 {
+            pos = index - 1
+        }
+
+        let targetChar = str.character(at: pos)
+        let targetType = classifyChar(targetChar)
+
+        if targetType == .delimiter || targetType == .newline {
+            return NSRange(location: pos, length: 1)
+        }
+
+        var start = pos
+        var end = pos + 1
+
+        while start > 0 {
+            let ch = str.character(at: start - 1)
+            if classifyChar(ch) == targetType {
+                start -= 1
+            } else {
+                break
+            }
+        }
+
+        while end < str.length {
+            let ch = str.character(at: end)
+            if classifyChar(ch) == targetType {
+                end += 1
+            } else {
+                break
+            }
+        }
+
+        return NSRange(location: start, length: end - start)
+    }
+
+    public override func selectionRange(forProposedRange proposedCharRange: NSRange, granularity: NSSelectionGranularity) -> NSRange {
+        guard granularity == .selectByWord else {
+            return super.selectionRange(forProposedRange: proposedCharRange, granularity: granularity)
+        }
+        let text = (self.string as NSString)
+        guard text.length > 0 else {
+            return proposedCharRange
+        }
+        if proposedCharRange.length == 0 {
+            return tokenRange(at: proposedCharRange.location, in: text)
+        } else {
+            let startRange = tokenRange(at: proposedCharRange.location, in: text)
+            let endPos = max(proposedCharRange.location, proposedCharRange.location + proposedCharRange.length - 1)
+            let endRange = tokenRange(at: endPos, in: text)
+            let finalStart = min(startRange.location, endRange.location)
+            let finalEnd = max(startRange.location + startRange.length, endRange.location + endRange.length)
+            return NSRange(location: finalStart, length: finalEnd - finalStart)
+        }
+    }
+
+    // MARK: - Line Operations: Duplicate Line & Indented Newline
+    public func duplicateLine() {
+        guard isEditable, textStorage != nil else { return }
+        let nsText = (self.string as NSString)
+        guard nsText.length > 0 else { return }
+
+        let sel = selectedRange()
+        let lineRange = nsText.lineRange(for: NSRange(location: sel.location, length: 0))
+        let lineContent = nsText.substring(with: lineRange)
+
+        let insertionText = lineContent.hasSuffix("\n") ? lineContent : "\n" + lineContent
+        let insertLoc = lineRange.upperBound
+
+        if shouldChangeText(in: NSRange(location: insertLoc, length: 0), replacementString: insertionText) {
+            let colOffset = sel.location - lineRange.lowerBound
+            let newSelLoc = min(insertLoc + colOffset, nsText.length + (insertionText as NSString).length)
+
+            replaceCharacters(in: NSRange(location: insertLoc, length: 0), with: insertionText)
+            didChangeText()
+
+            setSelectedRange(NSRange(location: newSelLoc, length: 0))
+            scrollRangeToVisible(selectedRange())
+        }
+    }
+
+    public func insertIndentedNewline(moveBelow: Bool) {
+        guard isEditable, textStorage != nil else {
+            super.insertNewline(nil)
+            return
+        }
+
+        let nsText = (self.string as NSString)
+        let sel = selectedRange()
+
+        let effectiveLoc: Int
+        let replaceRange: NSRange
+        if moveBelow {
+            let lineRange = nsText.lineRange(for: NSRange(location: sel.location, length: 0))
+            var lineEnd = lineRange.upperBound
+            if lineEnd > lineRange.lowerBound && nsText.character(at: lineEnd - 1) == 0x0A {
+                lineEnd -= 1
+                if lineEnd > lineRange.lowerBound && nsText.character(at: lineEnd - 1) == 0x0D {
+                    lineEnd -= 1
+                }
+            }
+            effectiveLoc = lineEnd
+            replaceRange = NSRange(location: lineEnd, length: 0)
+        } else {
+            effectiveLoc = sel.location
+            replaceRange = sel
+        }
+
+        let lineRange = nsText.lineRange(for: NSRange(location: effectiveLoc, length: 0))
+        let currentLine = nsText.substring(with: lineRange)
+
+        var indent = ""
+        for ch in currentLine {
+            if ch == " " || ch == "\t" {
+                indent.append(ch)
+            } else {
+                break
+            }
+        }
+
+        let trimmed = currentLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        var extraIndent = ""
+        if trimmed.hasSuffix("{") || trimmed.hasSuffix(":") || trimmed.hasSuffix("(") {
+            extraIndent = indent.contains("\t") ? "\t" : "    "
+        }
+
+        let insertion = "\n" + indent + extraIndent
+        if shouldChangeText(in: replaceRange, replacementString: insertion) {
+            replaceCharacters(in: replaceRange, with: insertion)
+            didChangeText()
+            let newCursorLoc = replaceRange.location + (insertion as NSString).length
+            setSelectedRange(NSRange(location: newCursorLoc, length: 0))
+            scrollRangeToVisible(selectedRange())
+        }
     }
 
     public override func paste(_ sender: Any?) {
