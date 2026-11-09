@@ -110,10 +110,32 @@ public enum CodeCompletionEngine {
         return (prefix, prefixRange)
     }
 
+    // MARK: - In-Memory Token Cache
+    private static var cachedTextHash: Int = 0
+    private static var cachedTextLength: Int = 0
+    private static var cachedTokens: Set<String> = []
+    private static let cacheLock = NSLock()
+
+    public static func getCachedTokens(for text: String) -> Set<String> {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+
+        let len = (text as NSString).length
+        let hash = text.hashValue
+        if hash == cachedTextHash && len == cachedTextLength && !cachedTokens.isEmpty {
+            return cachedTokens
+        }
+        let tokens = extractTokens(from: text, excludingRange: nil)
+        cachedTextHash = hash
+        cachedTextLength = len
+        cachedTokens = tokens
+        return tokens
+    }
+
     /// Searches text for candidates matching the given prefix.
     /// Only returns candidates actually found in the document.
     public static func findMatches(prefix: String, in text: String, excludingRange: NSRange? = nil, maxCount: Int = 12) -> [String] {
-        let tokens = extractTokens(from: text, excludingRange: excludingRange)
+        let tokens = getCachedTokens(for: text)
         guard !tokens.isEmpty else { return [] }
 
         let lower = prefix.lowercased()

@@ -229,6 +229,23 @@ public class EditorDocument: ObservableObject, Identifiable {
     @Published public var selectionLength: Int = 0
     @Published public var selectedRange: NSRange = NSRange(location: 0, length: 0)
     @Published public var scrollOrigin: NSPoint = .zero
+    @Published public private(set) var totalLines: Int = 1
+
+    public func recalculateTotalLines() {
+        let ns = content as NSString
+        let len = ns.length
+        guard len > 0 else {
+            if totalLines != 1 { totalLines = 1 }
+            return
+        }
+        var count = 1
+        var i = 0
+        while i < len {
+            if ns.character(at: i) == 0x0A { count += 1 }
+            i += 1
+        }
+        if totalLines != count { totalLines = count }
+    }
 
     public let undoManager: UndoManager = UndoManager()
     private var undoStack: [DocumentEditSnapshot] = []
@@ -297,6 +314,7 @@ public class EditorDocument: ObservableObject, Identifiable {
         self.undoManager.groupsByEvent = true
         setupUndoManagerObservers()
         updateUndoRedoState()
+        recalculateTotalLines()
     }
 
     public convenience init(
@@ -416,6 +434,7 @@ public class EditorDocument: ObservableObject, Identifiable {
         }
 
         recalculateModifiedState()
+        recalculateTotalLines()
         updateUndoRedoState()
         onContentDidChange?()
     }
@@ -444,6 +463,7 @@ public class EditorDocument: ObservableObject, Identifiable {
         cursorLine = targetSnapshot.cursorLine
         cursorColumn = targetSnapshot.cursorColumn
         recalculateModifiedState()
+        recalculateTotalLines()
         updateUndoRedoState()
         onContentDidChange?()
         return true
@@ -473,6 +493,7 @@ public class EditorDocument: ObservableObject, Identifiable {
         cursorLine = targetSnapshot.cursorLine
         cursorColumn = targetSnapshot.cursorColumn
         recalculateModifiedState()
+        recalculateTotalLines()
         updateUndoRedoState()
         onContentDidChange?()
         return true
@@ -517,11 +538,23 @@ public class EditorDocument: ObservableObject, Identifiable {
 
     private func updateCursorFromRange(_ range: NSRange) {
         let nsText = content as NSString
-        let safeLoc = max(0, min(range.location, nsText.length))
-        let prefix = nsText.substring(with: NSRange(location: 0, length: safeLoc))
-        let lines = prefix.components(separatedBy: "\n")
-        cursorLine = max(1, lines.count)
-        cursorColumn = ((lines.last ?? "") as NSString).length + 1
+        let length = nsText.length
+        let safeLoc = max(0, min(range.location, length))
+
+        var lineCount = 1
+        var lineStart = 0
+        var i = 0
+        while i < safeLoc {
+            if nsText.character(at: i) == 0x0A {
+                lineCount += 1
+                lineStart = i + 1
+            }
+            i += 1
+        }
+        let col = (safeLoc - lineStart) + 1
+
+        if cursorLine != lineCount { cursorLine = lineCount }
+        if cursorColumn != col { cursorColumn = col }
     }
 
     /// Records the current content and highlights so a highlight change can be undone with ⌘Z.
@@ -1224,7 +1257,7 @@ public class AppStateManager: ObservableObject {
             self?.saveSessionToDisk()
         }
         saveWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: item)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: item)
     }
 
     @discardableResult

@@ -374,6 +374,26 @@ public final class SyntaxEngine {
         return NSFont.monospacedSystemFont(ofSize: size, weight: bold ? .bold : .regular)
     }
 
+    // MARK: - Regular Expression Cache for High-Performance Highlighting
+    private static var regexCache: [String: NSRegularExpression] = [:]
+    private static let regexLock = NSLock()
+
+    private static func cachedRegex(pattern: String, options: NSRegularExpression.Options = []) -> NSRegularExpression? {
+        let key = "\(pattern)_\(options.rawValue)"
+        regexLock.lock()
+        if let existing = regexCache[key] {
+            regexLock.unlock()
+            return existing
+        }
+        regexLock.unlock()
+
+        guard let reg = try? NSRegularExpression(pattern: pattern, options: options) else { return nil }
+        regexLock.lock()
+        regexCache[key] = reg
+        regexLock.unlock()
+        return reg
+    }
+
     // MARK: - Syntax Highlighting Application
     public static func highlight(
         storage: NSTextStorage,
@@ -401,7 +421,7 @@ public final class SyntaxEngine {
         ], range: fullRange)
 
         let lang = canonicalLanguage(language)
-        if lang == "plain text" || length > 150_000 || !syntaxEnabled {
+        if lang == "plain text" || length > 100_000 || !syntaxEnabled {
             storage.endEditing()
             return
         }
@@ -418,9 +438,9 @@ public final class SyntaxEngine {
 
         let boldFont = resolveFont(family: baseFont.familyName ?? baseFont.fontName, size: baseFont.pointSize, bold: true)
 
-        // Helper regex applier
+        // Helper regex applier using thread-safe compiled regex cache
         func applyRegex(_ pattern: String, options: NSRegularExpression.Options = [], color: NSColor, font: NSFont? = nil) {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return }
+            guard let regex = cachedRegex(pattern: pattern, options: options) else { return }
             let matches = regex.matches(in: text, options: [], range: fullRange)
             for m in matches {
                 storage.addAttribute(.foregroundColor, value: color, range: m.range)
@@ -454,7 +474,7 @@ public final class SyntaxEngine {
             if backtick { alternatives.append(("`(?:\\\\.|[^`\\\\])*`", false)) }
 
             let combined = alternatives.map { "(" + $0.pattern + ")" }.joined(separator: "|")
-            guard let regex = try? NSRegularExpression(pattern: combined, options: [.anchorsMatchLines]) else { return }
+            guard let regex = cachedRegex(pattern: combined, options: [.anchorsMatchLines]) else { return }
             for m in regex.matches(in: text, options: [], range: fullRange) {
                 for (index, alt) in alternatives.enumerated() {
                     let r = m.range(at: index + 1)

@@ -1198,6 +1198,24 @@ public struct BottomDeveloperPanel: View {
     }
 }
 
+// MARK: - Status Bar Document Position Subview (Isolates cursor position updates)
+struct StatusBarDocumentPositionView: View {
+    @ObservedObject var document: EditorDocument
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Text("Line \(document.cursorLine), Column \(document.cursorColumn)")
+                .font(.system(size: 11, design: .monospaced))
+
+            if document.selectionLength > 0 {
+                Text("Sel: \(document.selectionLength) chars")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.orange)
+            }
+        }
+    }
+}
+
 // MARK: - Editor Status Bar View
 public struct EditorStatusBar: View {
     @ObservedObject var appState: AppStateManager
@@ -1205,17 +1223,9 @@ public struct EditorStatusBar: View {
     public var body: some View {
         HStack(spacing: 16) {
             if let doc = appState.activeDocument {
-                Text("Line \(doc.cursorLine), Column \(doc.cursorColumn)")
-                    .font(.system(size: 11, design: .monospaced))
+                StatusBarDocumentPositionView(document: doc)
 
-                if doc.selectionLength > 0 {
-                    Text("Sel: \(doc.selectionLength) chars")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.orange)
-                }
-
-                let linesCount = doc.content.components(separatedBy: "\n").count
-                Text("Length: \(linesCount) lines")
+                Text("Length: \(doc.totalLines) lines")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(.secondary)
 
@@ -3051,7 +3061,7 @@ public enum SplitDropZone {
 
 // MARK: - Single Editor Container View with Vertical Split Drop Zone
 public struct SingleEditorContainerView: View {
-    @ObservedObject var document: EditorDocument
+    let document: EditorDocument
     @ObservedObject var appState: AppStateManager
 
     public init(document: EditorDocument, appState: AppStateManager) {

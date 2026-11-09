@@ -2,15 +2,86 @@ import SwiftUI
 import AppKit
 import Combine
 
-// MARK: - Editor Diagnostic Logger
+// MARK: - Editor Diagnostic Logger (Zero-allocation with @autoclosure)
 public enum EditorDiagnostics {
     public static var isEnabled: Bool = false
-    public static func log(_ msg: String) {
+    public static func log(_ msg: @autoclosure () -> String) {
         #if DEBUG
         if isEnabled {
-            NSLog("[NPad++ Diagnostic] %@", msg)
+            NSLog("[NPad++ Diagnostic] %@", msg())
         }
         #endif
+    }
+}
+
+// MARK: - Fast Line Index for O(log N) Line Lookups
+public final class FastLineIndex {
+    private(set) var lineStarts: [Int] = [0]
+    private var lastLength: Int = -1
+    private var lastHash: Int = 0
+
+    public init() {}
+
+    public func update(ifNeeded string: NSString) {
+        let len = string.length
+        let hash = string.hash
+        if len == lastLength && hash == lastHash {
+            return
+        }
+        build(from: string)
+    }
+
+    public func build(from string: NSString) {
+        let len = string.length
+        lastLength = len
+        lastHash = string.hash
+        var starts: [Int] = [0]
+        starts.reserveCapacity(max(10, len / 40))
+
+        if len > 0 {
+            var i = 0
+            while i < len {
+                if string.character(at: i) == 0x0A { // '\n'
+                    starts.append(i + 1)
+                }
+                i += 1
+            }
+        }
+        self.lineStarts = starts
+    }
+
+    /// Returns 1-based line number for character index in O(log N)
+    public func lineNumber(at charIndex: Int) -> Int {
+        guard !lineStarts.isEmpty else { return 1 }
+        let clamped = max(0, charIndex)
+        var low = 0
+        var high = lineStarts.count - 1
+        var ans = 0
+        while low <= high {
+            let mid = (low + high) / 2
+            if lineStarts[mid] <= clamped {
+                ans = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        return ans + 1
+    }
+
+    /// Returns character range of a 1-based line number in O(1)
+    public func lineRange(forLine line: Int, totalLength: Int) -> NSRange {
+        let idx = line - 1
+        guard idx >= 0 && idx < lineStarts.count else {
+            return NSRange(location: max(0, totalLength), length: 0)
+        }
+        let start = lineStarts[idx]
+        let nextStart = (idx + 1 < lineStarts.count) ? lineStarts[idx + 1] : totalLength
+        return NSRange(location: start, length: max(0, nextStart - start))
+    }
+
+    public var totalLines: Int {
+        return lineStarts.count
     }
 }
 
@@ -59,7 +130,7 @@ public class CodePadScrollView: NSScrollView {
 
 // MARK: - MacEditorView (NSViewRepresentable)
 public struct MacEditorView: NSViewRepresentable {
-    @ObservedObject var document: EditorDocument
+    let document: EditorDocument
     @ObservedObject var appState: AppStateManager
     var fontSize: CGFloat
     var fontFamily: String
@@ -226,7 +297,7 @@ public struct MacEditorView: NSViewRepresentable {
         let lineRuler = LineNumberRulerView(scrollView: scrollView, textView: textView, document: document, appState: appState, paneSide: paneSide)
         scrollView.verticalRulerView = lineRuler
 
-        // 9. Observer for scroll & edits to redraw line numbers and keep text view filling visible viewport
+        // 9. Observer for scroll & edits to redraw line numbers
         scrollView.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(
             lineRuler,
@@ -249,7 +320,7 @@ public struct MacEditorView: NSViewRepresentable {
 
         // Forward scroll changes when synchronized scrolling is active
         let coordinator = context.coordinator
-        NotificationCenter.default.addObserver(
+        let syncToken = NotificationCenter.default.addObserver(
             forName: NSView.boundsDidChangeNotification,
             object: scrollView.contentView,
             queue: .main
@@ -264,10 +335,11 @@ public struct MacEditorView: NSViewRepresentable {
                 }
             }
         }
+        coordinator.observerTokens.append(syncToken)
 
         // Ensure text view fills entire clip view so clicks below/right of text immediately focus the editor
         scrollView.postsFrameChangedNotifications = true
-        NotificationCenter.default.addObserver(
+        let frameToken = NotificationCenter.default.addObserver(
             forName: NSView.frameDidChangeNotification,
             object: scrollView,
             queue: .main
@@ -275,13 +347,8 @@ public struct MacEditorView: NSViewRepresentable {
             guard let tv = textView, let sv = scrollView else { return }
             let contentSize = sv.contentSize
             tv.minSize = NSSize(width: tv.isHorizontallyResizable ? 100 : contentSize.width, height: contentSize.height)
-            if !tv.isHorizontallyResizable && tv.frame.size.width < contentSize.width {
-                tv.frame.size.width = contentSize.width
-            }
-            if tv.frame.size.height < contentSize.height {
-                tv.frame.size.height = contentSize.height
-            }
         }
+        coordinator.observerTokens.append(frameToken)
 
         // 10. Subscribe to search and global editor actions
         context.coordinator.subscribeToActions()
@@ -297,6 +364,17 @@ public struct MacEditorView: NSViewRepresentable {
         }
 
         return scrollView
+    }
+
+    public static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
+        for token in coordinator.observerTokens {
+            NotificationCenter.default.removeObserver(token)
+        }
+        coordinator.observerTokens.removeAll()
+        if let ruler = nsView.verticalRulerView {
+            NotificationCenter.default.removeObserver(ruler)
+        }
+        coordinator.cleanup()
     }
 
     public func updateNSView(_ nsView: NSScrollView, context: Context) {
@@ -415,9 +493,6 @@ public struct MacEditorView: NSViewRepresentable {
             context.coordinator.isUpdating = false
             context.coordinator.refreshAllVisualLayers()
             nsView.verticalRulerView?.needsDisplay = true
-        } else {
-            // Refresh marks and search highlights
-            context.coordinator.refreshAllVisualLayers()
         }
 
         // Ensure typingAttributes are maintained
@@ -498,6 +573,17 @@ public struct MacEditorView: NSViewRepresentable {
         public var currentShowLineNumbers: Bool = true
         private var syntaxHighlightWorkItem: DispatchWorkItem?
         private var cancellables = Set<AnyCancellable>()
+        public var observerTokens: [NSObjectProtocol] = []
+
+        public func cleanup() {
+            cancellables.removeAll()
+            syntaxHighlightWorkItem?.cancel()
+            syntaxHighlightWorkItem = nil
+            textView = nil
+            scrollView = nil
+            textStorage = nil
+            layoutManager = nil
+        }
 
         init(_ parent: MacEditorView) {
             self.parent = parent
@@ -819,24 +905,58 @@ public struct MacEditorView: NSViewRepresentable {
             guard !isUpdating, let textView = notification.object as? NSTextView else { return }
             let sel = textView.selectedRange()
             let text = textView.string as NSString
+            let len = text.length
+            let safeLoc = min(sel.location, len)
 
-            parent.document.selectedRange = sel
+            // Fast O(log N) line number calculation with zero heap string allocations:
+            let newLine: Int
+            if let ruler = textView.enclosingScrollView?.verticalRulerView as? LineNumberRulerView {
+                newLine = ruler.lineIndex.lineNumber(at: safeLoc)
+            } else {
+                var lineCount = 1
+                for i in 0..<safeLoc {
+                    if text.character(at: i) == 0x0A { lineCount += 1 }
+                }
+                newLine = lineCount
+            }
 
-            let safeLoc = min(sel.location, text.length)
-            let prefix = text.substring(with: NSRange(location: 0, length: safeLoc))
-            let lines = prefix.components(separatedBy: "\n")
-            let newLine = lines.count
-            parent.document.cursorLine = newLine
-            // UTF-16 length so the column round-trips with characterIndex(forLine:column:) for emoji/accents
-            parent.document.cursorColumn = ((lines.last ?? "") as NSString).length + 1
-            parent.document.selectionLength = sel.length
+            // Fast column calculation: scan backwards to the newline before safeLoc
+            var colStart = safeLoc
+            while colStart > 0 {
+                let ch = text.character(at: colStart - 1)
+                if ch == 0x0A || ch == 0x0D {
+                    break
+                }
+                colStart -= 1
+            }
+            let newColumn = (safeLoc - colStart) + 1
+
+            var didChange = false
+            if parent.document.cursorLine != newLine {
+                parent.document.cursorLine = newLine
+                didChange = true
+            }
+            if parent.document.cursorColumn != newColumn {
+                parent.document.cursorColumn = newColumn
+                didChange = true
+            }
+            if parent.document.selectedRange != sel {
+                parent.document.selectedRange = sel
+                didChange = true
+            }
+            if parent.document.selectionLength != sel.length {
+                parent.document.selectionLength = sel.length
+                didChange = true
+            }
 
             if let clipView = textView.enclosingScrollView?.contentView {
                 parent.document.scrollOrigin = clipView.bounds.origin
             }
 
-            // Invalidate ruler when cursor position changes to refresh active line highlight
-            textView.enclosingScrollView?.verticalRulerView?.needsDisplay = true
+            // Invalidate ruler only when cursor position actually changes
+            if didChange {
+                textView.enclosingScrollView?.verticalRulerView?.needsDisplay = true
+            }
         }
     }
 }
@@ -847,8 +967,19 @@ public class CodePadTextView: NSTextView {
     public weak var document: EditorDocument?
     public var paneSide: EditorPaneSide? = nil
     public let completionController = CodeCompletionController()
+    private var completionWorkItem: DispatchWorkItem?
+
+    public func scheduleAutoCompletionEvaluation(delayMs: Int = 120) {
+        completionWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.evaluateAutoCompletions(manually: false)
+        }
+        completionWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delayMs), execute: item)
+    }
 
     deinit {
+        completionWorkItem?.cancel()
         completionController.dismiss()
     }
 
@@ -1054,9 +1185,7 @@ public class CodePadTextView: NSTextView {
         needsDisplay = true
 
         if let appState = appState, appState.isAutoCompleteEnabled {
-            DispatchQueue.main.async { [weak self] in
-                self?.evaluateAutoCompletions(manually: false)
-            }
+            scheduleAutoCompletionEvaluation(delayMs: 120)
         } else {
             completionController.dismiss()
         }
@@ -1065,9 +1194,7 @@ public class CodePadTextView: NSTextView {
     public override func deleteBackward(_ sender: Any?) {
         super.deleteBackward(sender)
         if let appState = appState, appState.isAutoCompleteEnabled {
-            DispatchQueue.main.async { [weak self] in
-                self?.evaluateAutoCompletions(manually: false)
-            }
+            scheduleAutoCompletionEvaluation(delayMs: 120)
         } else {
             completionController.dismiss()
         }
@@ -1684,6 +1811,12 @@ public class LineNumberRulerView: NSRulerView {
     public weak var appState: AppStateManager?
     public var paneSide: EditorPaneSide? = nil
 
+    public let lineIndex = FastLineIndex()
+    private var cachedRegularFont: NSFont?
+    private var cachedBoldFont: NSFont?
+    private var cachedFontSize: CGFloat = 0
+    private var cachedDigitWidth: CGFloat = 0
+
     public init(
         scrollView: NSScrollView,
         textView: NSTextView,
@@ -1727,7 +1860,7 @@ public class LineNumberRulerView: NSRulerView {
         let pointInRuler = convert(event.locationInWindow, from: nil)
         guard let textView = self.clientView as? NSTextView,
               let layoutManager = textView.layoutManager,
-              textView.textContainer != nil else {
+              let textContainer = textView.textContainer else {
             super.mouseDown(with: event)
             return
         }
@@ -1736,41 +1869,16 @@ public class LineNumberRulerView: NSRulerView {
         let clickY = pointInTextView.y - textView.textContainerInset.height
 
         let text = textView.string as NSString
-        var targetLine = 1
-        var currentLine = 1
-        let fullRange = NSRange(location: 0, length: text.length)
+        lineIndex.update(ifNeeded: text)
 
-        if text.length > 0 {
-            text.enumerateSubstrings(in: fullRange, options: [.byLines, .substringNotRequired]) { _, subRange, _, stop in
-                let glyphIndex = layoutManager.glyphIndexForCharacter(at: subRange.location)
-                let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
-                if clickY >= lineRect.minY && clickY <= lineRect.maxY {
-                    targetLine = currentLine
-                    stop.pointee = true
-                    textView.setSelectedRange(NSRange(location: subRange.location, length: 0))
-                }
-                currentLine += 1
-            }
-
-            // Check if clicked in trailing newline extra line
-            let hasTrailingNewline = text.length > 0 && {
-                let lastChar = text.character(at: text.length - 1)
-                return lastChar == 0x0A || lastChar == 0x0D
-            }()
-            if hasTrailingNewline {
-                let extraRect: NSRect
-                if layoutManager.extraLineFragmentTextContainer != nil && layoutManager.extraLineFragmentRect.height > 0 {
-                    extraRect = layoutManager.extraLineFragmentRect
-                } else {
-                    let lastGlyph = max(0, layoutManager.numberOfGlyphs - 1)
-                    let lastRect = layoutManager.lineFragmentRect(forGlyphAt: lastGlyph, effectiveRange: nil)
-                    extraRect = NSRect(x: lastRect.origin.x, y: lastRect.maxY, width: lastRect.width, height: max(lastRect.height, 18))
-                }
-                if clickY >= extraRect.minY && clickY <= extraRect.maxY + 5 {
-                    targetLine = currentLine
-                    textView.setSelectedRange(NSRange(location: text.length, length: 0))
-                }
-            }
+        let targetLine: Int
+        if text.length == 0 {
+            targetLine = 1
+        } else {
+            let charIndex = layoutManager.characterIndex(for: NSPoint(x: 0, y: max(0, clickY)), in: textContainer, fractionOfDistanceBetweenInsertionPoints: nil)
+            targetLine = lineIndex.lineNumber(at: charIndex)
+            let lineRange = lineIndex.lineRange(forLine: targetLine, totalLength: text.length)
+            textView.setSelectedRange(NSRange(location: lineRange.location, length: 0))
         }
 
         document?.toggleBookmark(targetLine)
@@ -1816,8 +1924,18 @@ public class LineNumberRulerView: NSRulerView {
 
         let font = textView.font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         let labelFontSize = max(10, font.pointSize - 2)
-        let regularLabelFont = NSFont.monospacedDigitSystemFont(ofSize: labelFontSize, weight: .regular)
-        let boldLabelFont = NSFont.monospacedDigitSystemFont(ofSize: labelFontSize, weight: .bold)
+
+        if cachedFontSize != labelFontSize || cachedRegularFont == nil || cachedBoldFont == nil {
+            cachedFontSize = labelFontSize
+            let reg = NSFont.monospacedDigitSystemFont(ofSize: labelFontSize, weight: .regular)
+            let bld = NSFont.monospacedDigitSystemFont(ofSize: labelFontSize, weight: .bold)
+            cachedRegularFont = reg
+            cachedBoldFont = bld
+            cachedDigitWidth = ("0" as NSString).size(withAttributes: [.font: reg]).width
+        }
+        let regularLabelFont = cachedRegularFont!
+        let boldLabelFont = cachedBoldFont!
+        let digitWidth = cachedDigitWidth
 
         let text = textView.string as NSString
         let activeLine = document?.cursorLine ?? 1
@@ -1832,8 +1950,7 @@ public class LineNumberRulerView: NSRulerView {
                     .font: boldLabelFont,
                     .foregroundColor: activeTheme.textColor
                 ]
-                let numSize = numStr.size(withAttributes: attrs)
-                let drawPoint = NSPoint(x: bounds.width - numSize.width - 8, y: y)
+                let drawPoint = NSPoint(x: bounds.width - digitWidth - 8, y: y)
                 numStr.draw(at: drawPoint, withAttributes: attrs)
             }
 
@@ -1845,6 +1962,8 @@ public class LineNumberRulerView: NSRulerView {
             context?.restoreGState()
             return
         }
+
+        lineIndex.update(ifNeeded: text)
 
         let visibleRect = textView.visibleRect
         var boundingRect = visibleRect
@@ -1862,22 +1981,14 @@ public class LineNumberRulerView: NSRulerView {
             length: min(text.length - firstLineRange.location, charRange.length + (charRange.location - firstLineRange.location))
         )
 
-        // Count lines before the visible range using fast newline scan
-        var lineNumber = 1
-        let scanLimit = min(scanRange.location, text.length)
-        if scanLimit > 0 {
-            for i in 0..<scanLimit {
-                if text.character(at: i) == 0x0A {
-                    lineNumber += 1
-                }
-            }
-        }
+        // Count lines before the visible range in O(log N) using FastLineIndex binary search
+        var lineNumber = lineIndex.lineNumber(at: scanRange.location)
 
         // Keep ruler thickness stable for document length so dragging scroll bar never triggers mid-scroll tile()
-        let totalLines = max(lineNumber + 50, document?.cursorLine ?? 1, 100)
+        let totalLines = max(lineIndex.totalLines, document?.cursorLine ?? 1, 100)
         let neededDigits = "\(totalLines)".count
         let minThickness = CGFloat(max(48, neededDigits * 9 + 20))
-        if minThickness > self.ruleThickness {
+        if minThickness > self.ruleThickness + 2 {
             DispatchQueue.main.async { [weak self] in
                 self?.ruleThickness = minThickness
             }
@@ -1950,8 +2061,8 @@ public class LineNumberRulerView: NSRulerView {
 
             if self.appState?.showLineNumbers ?? true {
                 let numStr = "\(lineNumber)" as NSString
-                let numSize = numStr.size(withAttributes: attrs)
-                let drawPoint = NSPoint(x: self.bounds.width - numSize.width - 8, y: y + max(0, (lineRect.height - numSize.height) / 2))
+                let numWidth = CGFloat(numStr.length) * digitWidth
+                let drawPoint = NSPoint(x: self.bounds.width - numWidth - 8, y: y + max(0, (lineRect.height - labelFontSize) / 2))
                 numStr.draw(at: drawPoint, withAttributes: attrs)
             }
 
@@ -1995,8 +2106,8 @@ public class LineNumberRulerView: NSRulerView {
 
                 if self.appState?.showLineNumbers ?? true {
                     let numStr = "\(lineNumber)" as NSString
-                    let numSize = numStr.size(withAttributes: attrs)
-                    let drawPoint = NSPoint(x: self.bounds.width - numSize.width - 8, y: y + max(0, (extraRect.height - numSize.height) / 2))
+                    let numWidth = CGFloat(numStr.length) * digitWidth
+                    let drawPoint = NSPoint(x: self.bounds.width - numWidth - 8, y: y + max(0, (extraRect.height - labelFontSize) / 2))
                     numStr.draw(at: drawPoint, withAttributes: attrs)
                 }
             }
