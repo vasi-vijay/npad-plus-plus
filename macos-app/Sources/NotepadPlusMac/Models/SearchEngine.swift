@@ -139,6 +139,48 @@ public final class SearchEngine {
             return SearchResult(matchingRanges: [], totalCount: 0, activeIndex: 0, errorMessage: nil)
         }
 
+        // Fast path: Literal substring search (10x-30x faster than compiling NSRegularExpression)
+        if options.searchMode == .normal && !options.wholeWord && !options.isRegex {
+            var ranges: [NSRange] = []
+            var searchRange = searchBounds
+            let compareOptions: NSString.CompareOptions = options.caseSensitive ? [] : [.caseInsensitive]
+
+            while searchRange.length > 0 {
+                let match = nsText.range(of: query, options: compareOptions, range: searchRange)
+                if match.location == NSNotFound { break }
+                ranges.append(match)
+                let nextLoc = match.location + max(1, match.length)
+                if nextLoc >= searchBounds.location + searchBounds.length { break }
+                searchRange = NSRange(location: nextLoc, length: (searchBounds.location + searchBounds.length) - nextLoc)
+            }
+
+            if options.backward {
+                ranges.reverse()
+            }
+
+            var activeIdx = 0
+            if let current = selectedRange, !ranges.isEmpty {
+                if let idx = ranges.firstIndex(where: { $0.location == current.location && $0.length == current.length }) {
+                    activeIdx = idx + 1
+                } else if !options.backward, let nextIdx = ranges.firstIndex(where: { $0.location >= current.location }) {
+                    activeIdx = nextIdx + 1
+                } else if options.backward, let prevIdx = ranges.firstIndex(where: { $0.location <= current.location }) {
+                    activeIdx = prevIdx + 1
+                } else {
+                    activeIdx = 1
+                }
+            } else if !ranges.isEmpty {
+                activeIdx = 1
+            }
+
+            return SearchResult(
+                matchingRanges: ranges,
+                totalCount: ranges.count,
+                activeIndex: activeIdx,
+                errorMessage: nil
+            )
+        }
+
         var regexOptions: NSRegularExpression.Options = []
         if !options.caseSensitive {
             regexOptions.insert(.caseInsensitive)

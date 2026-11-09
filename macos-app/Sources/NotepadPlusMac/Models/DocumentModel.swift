@@ -209,6 +209,19 @@ public struct PersistedWorkspaceSession: Codable, Equatable {
     }
 }
 
+// MARK: - Isolated Cursor Position Tracker (Prevents document-wide tab/sidebar redraw storms)
+public final class CursorTracker: ObservableObject {
+    @Published public var line: Int = 1
+    @Published public var column: Int = 1
+    @Published public var selectionLength: Int = 0
+
+    public init(line: Int = 1, column: Int = 1, selectionLength: Int = 0) {
+        self.line = line
+        self.column = column
+        self.selectionLength = selectionLength
+    }
+}
+
 public class EditorDocument: ObservableObject, Identifiable {
     public let id: UUID
     @Published public var title: String
@@ -224,11 +237,22 @@ public class EditorDocument: ObservableObject, Identifiable {
     @Published public var language: String = "Plain Text"
     @Published public var bookmarks: Set<Int> = [] // 1-indexed line numbers
     @Published public var marks: [TextMark] = []   // Persistent in-memory text marks
-    @Published public var cursorLine: Int = 1
-    @Published public var cursorColumn: Int = 1
-    @Published public var selectionLength: Int = 0
-    @Published public var selectedRange: NSRange = NSRange(location: 0, length: 0)
-    @Published public var scrollOrigin: NSPoint = .zero
+
+    public let cursorTracker = CursorTracker()
+    public var cursorLine: Int {
+        get { cursorTracker.line }
+        set { cursorTracker.line = newValue }
+    }
+    public var cursorColumn: Int {
+        get { cursorTracker.column }
+        set { cursorTracker.column = newValue }
+    }
+    public var selectionLength: Int {
+        get { cursorTracker.selectionLength }
+        set { cursorTracker.selectionLength = newValue }
+    }
+    public var selectedRange: NSRange = NSRange(location: 0, length: 0)
+    public var scrollOrigin: NSPoint = .zero
     @Published public private(set) var totalLines: Int = 1
 
     public func recalculateTotalLines() {
@@ -411,8 +435,15 @@ public class EditorDocument: ObservableObject, Identifiable {
             marks: marks
         )
         undoStack.append(prevSnapshot)
-        if undoStack.count > 250 {
-            undoStack.removeFirst()
+        let maxSnapshots: Int = {
+            let size = newContent.utf8.count
+            if size > 5_000_000 { return 25 }
+            if size > 1_000_000 { return 50 }
+            if size > 200_000 { return 100 }
+            return 250
+        }()
+        if undoStack.count > maxSnapshots {
+            undoStack.removeFirst(undoStack.count - maxSnapshots)
         }
         redoStack.removeAll()
 
@@ -567,7 +598,16 @@ public class EditorDocument: ObservableObject, Identifiable {
             actionName: actionName,
             marks: marks
         ))
-        if undoStack.count > 250 { undoStack.removeFirst() }
+        let maxSnapshots: Int = {
+            let size = content.utf8.count
+            if size > 5_000_000 { return 25 }
+            if size > 1_000_000 { return 50 }
+            if size > 200_000 { return 100 }
+            return 250
+        }()
+        if undoStack.count > maxSnapshots {
+            undoStack.removeFirst(undoStack.count - maxSnapshots)
+        }
         redoStack.removeAll()
         updateUndoRedoState()
     }
@@ -2520,10 +2560,9 @@ public class AppStateManager: ObservableObject {
         var newLines = lines
         newLines.insert(lines[targetIdx], at: targetIdx + 1)
         let newContent = newLines.joined(separator: "\n")
-        let newLine = min(savedLine + 1, newLines.count)
-        let newLoc = doc.characterIndex(forLine: newLine, column: savedCol, in: newContent)
+        let newLoc = doc.characterIndex(forLine: savedLine, column: savedCol, in: newContent)
         doc.applyEdit(newContent, newSelectedRange: NSRange(location: newLoc, length: 0), actionName: "Duplicate Line")
-        doc.cursorLine = newLine
+        doc.cursorLine = savedLine
         doc.cursorColumn = savedCol
         scheduleSessionSave()
     }

@@ -55,6 +55,7 @@ swiftc -O -target arm64-apple-macos14.0 ${SDK_FLAG} ${MODULE_CACHE_FLAG} \
     Sources/NotepadPlusMac/Models/PluginModel.swift \
     Sources/NotepadPlusMac/Models/PluginStore.swift \
     Sources/NotepadPlusMac/Editor/SyntaxEngine.swift \
+    Sources/NotepadPlusMac/Editor/CodeCompletionEngine.swift \
     Sources/NotepadPlusMac/Editor/MacEditorView.swift \
     Sources/NotepadPlusMac/Views/ProjectExplorerView.swift \
     Sources/NotepadPlusMac/Views/PluginManagerView.swift \

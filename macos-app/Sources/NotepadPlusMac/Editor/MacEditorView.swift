@@ -1900,6 +1900,7 @@ public class LineNumberRulerView: NSRulerView {
     }
 
     private func drawGutter(in rect: NSRect) {
+        if let win = self.window, !win.occlusionState.contains(.visible) { return }
         guard let textView = self.clientView as? NSTextView,
               let layoutManager = textView.layoutManager,
               let textContainer = textView.textContainer else { return }

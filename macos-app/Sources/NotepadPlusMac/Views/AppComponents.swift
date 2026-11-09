@@ -1200,15 +1200,19 @@ public struct BottomDeveloperPanel: View {
 
 // MARK: - Status Bar Document Position Subview (Isolates cursor position updates)
 struct StatusBarDocumentPositionView: View {
-    @ObservedObject var document: EditorDocument
+    @ObservedObject var tracker: CursorTracker
+
+    init(document: EditorDocument) {
+        self.tracker = document.cursorTracker
+    }
 
     var body: some View {
         HStack(spacing: 16) {
-            Text("Line \(document.cursorLine), Column \(document.cursorColumn)")
+            Text("Line \(tracker.line), Column \(tracker.column)")
                 .font(.system(size: 11, design: .monospaced))
 
-            if document.selectionLength > 0 {
-                Text("Sel: \(document.selectionLength) chars")
+            if tracker.selectionLength > 0 {
+                Text("Sel: \(tracker.selectionLength) chars")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(.orange)
             }
