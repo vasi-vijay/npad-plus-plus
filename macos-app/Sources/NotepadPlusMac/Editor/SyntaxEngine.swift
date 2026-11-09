@@ -401,33 +401,58 @@ public final class SyntaxEngine {
         baseFont: NSFont,
         isDark: Bool = false,
         theme: EditorTheme? = nil,
-        syntaxEnabled: Bool = true
+        syntaxEnabled: Bool = true,
+        targetRange: NSRange? = nil
     ) {
         let length = storage.length
         guard length > 0 else { return }
 
         let fullRange = NSRange(location: 0, length: length)
         let text = storage.string
+        let nsText = text as NSString
 
         let activeTheme = theme ?? (isDark ? ThemeManager.darkModern : ThemeManager.npadClassic)
         let defaultTextColor = activeTheme.textColor
 
-        storage.beginEditing()
-
-        // 1. Reset base font and base foreground color across entire document
-        storage.setAttributes([
-            .font: baseFont,
-            .foregroundColor: defaultTextColor
-        ], range: fullRange)
-
         let lang = canonicalLanguage(language)
         if lang == "plain text" || !syntaxEnabled {
+            storage.beginEditing()
+            storage.setAttributes([
+                .font: baseFont,
+                .foregroundColor: defaultTextColor
+            ], range: fullRange)
             storage.endEditing()
             return
         }
 
-        let highlightLimit = 100_000
-        let highlightRange = NSRange(location: 0, length: min(length, highlightLimit))
+        // Determine effective highlight range: targetRange expanded to line boundaries, or initial 100,000 chars
+        let highlightRange: NSRange
+        if let target = targetRange {
+            let clampedLoc = max(0, min(target.location, length))
+            let clampedLen = max(0, min(target.length, length - clampedLoc))
+            highlightRange = nsText.lineRange(for: NSRange(location: clampedLoc, length: clampedLen))
+        } else {
+            let highlightLimit = 100_000
+            highlightRange = NSRange(location: 0, length: min(length, highlightLimit))
+        }
+
+        guard highlightRange.length > 0 else { return }
+
+        storage.beginEditing()
+
+        if targetRange == nil {
+            // Full pass: reset base font and base foreground color across entire document
+            storage.setAttributes([
+                .font: baseFont,
+                .foregroundColor: defaultTextColor
+            ], range: fullRange)
+        } else {
+            // Viewport/Range pass: reset base attributes only within the targeted line range
+            storage.setAttributes([
+                .font: baseFont,
+                .foregroundColor: defaultTextColor
+            ], range: highlightRange)
+        }
 
         // Active Theme Color Palette
         let keywordColor = activeTheme.keywordColor

@@ -351,6 +351,7 @@ public struct MacEditorView: NSViewRepresentable {
                     coord.parent.appState.editorActionSubject.send(.synchronizedScroll(senderPane: side, scrollRatio: ratio))
                 }
             }
+            coord.scheduleViewportSyntaxHighlightIfNeeded()
         }
         coordinator.observerTokens.append(syncToken)
 
@@ -589,6 +590,7 @@ public struct MacEditorView: NSViewRepresentable {
         public var currentSyntaxEnabled: Bool = true
         public var currentShowLineNumbers: Bool = true
         private var syntaxHighlightWorkItem: DispatchWorkItem?
+        private var viewportHighlightWorkItem: DispatchWorkItem?
         private var cancellables = Set<AnyCancellable>()
         public var observerTokens: [NSObjectProtocol] = []
 
@@ -596,10 +598,54 @@ public struct MacEditorView: NSViewRepresentable {
             cancellables.removeAll()
             syntaxHighlightWorkItem?.cancel()
             syntaxHighlightWorkItem = nil
+            viewportHighlightWorkItem?.cancel()
+            viewportHighlightWorkItem = nil
             textView = nil
             scrollView = nil
             textStorage = nil
             layoutManager = nil
+        }
+
+        public func scheduleViewportSyntaxHighlightIfNeeded() {
+            guard let tv = textView,
+                  let st = tv.textStorage,
+                  let lm = tv.layoutManager,
+                  let tc = tv.textContainer else { return }
+            let totalLen = st.length
+            guard totalLen > 100_000 else { return }
+            let lang = parent.document.language.lowercased()
+            guard lang != "plain text", parent.appState.syntaxHighlightingEnabled else { return }
+
+            let visibleRect = tv.visibleRect
+            let glyphRange = lm.glyphRange(forBoundingRect: visibleRect, in: tc)
+            guard glyphRange.length > 0 else { return }
+            let charRange = lm.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+
+            // Only run viewport highlighting if visible text extends past the initial 100k characters
+            if charRange.location + charRange.length > 95_000 {
+                viewportHighlightWorkItem?.cancel()
+                let item = DispatchWorkItem { [weak self, weak tv] in
+                    guard let self = self, let textView = tv, let storage = textView.textStorage else { return }
+                    let margin = 20_000
+                    let start = max(0, charRange.location - margin)
+                    let end = min(storage.length, charRange.location + charRange.length + margin)
+                    let targetRange = NSRange(location: start, length: max(0, end - start))
+                    let font = textView.font ?? SyntaxEngine.resolveFont(family: self.parent.appState.fontFamily, size: self.parent.appState.fontSize)
+                    let isDark = self.parent.appState.isDarkMode
+                    let activeTheme = ThemeManager.theme(named: self.parent.appState.theme, fallbackDark: isDark)
+                    SyntaxEngine.highlight(
+                        storage: storage,
+                        language: self.parent.document.language,
+                        baseFont: font,
+                        isDark: isDark,
+                        theme: activeTheme,
+                        syntaxEnabled: true,
+                        targetRange: targetRange
+                    )
+                }
+                self.viewportHighlightWorkItem = item
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: item)
+            }
         }
 
         init(_ parent: MacEditorView) {

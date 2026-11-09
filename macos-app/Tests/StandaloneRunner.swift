@@ -2509,6 +2509,30 @@ struct StandaloneRunner {
             try assertEqual(resRegex.matchingRanges, resInsensitive.matchingRanges)
         }
 
+        runTest("testViewportSyntaxHighlightingTargetRange") {
+            // Build a synthetic large Swift document exceeding 100k chars
+            let header = String(repeating: "// padding header line to exceed initial boundary\n", count: 2500)
+            let deepCode = "func deepProductionFunction() -> String {\n    let secret = \"Hello Deep World\"\n    return secret\n}\n"
+            let fullText = header + deepCode
+            let storage = NSTextStorage(string: fullText)
+            let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+
+            // Initial full pass highlights 0..<100,000 chars
+            SyntaxEngine.highlight(storage: storage, language: "swift", baseFont: font)
+
+            // Viewport pass at the deepCode region (> 100k chars)
+            let deepStart = (header as NSString).length
+            let deepRange = NSRange(location: deepStart, length: (deepCode as NSString).length)
+            SyntaxEngine.highlight(storage: storage, language: "swift", baseFont: font, targetRange: deepRange)
+
+            // Verify that keywords inside the targetRange received keyword color
+            let funcLoc = (fullText as NSString).range(of: "func deepProductionFunction").location
+            try assertTrue(funcLoc != NSNotFound)
+            let color = storage.attribute(.foregroundColor, at: funcLoc, effectiveRange: nil) as? NSColor
+            let theme = ThemeManager.npadClassic
+            try assertEqual(color, theme.keywordColor)
+        }
+
         // ==============================================================================
         // Summary
         // ==============================================================================
