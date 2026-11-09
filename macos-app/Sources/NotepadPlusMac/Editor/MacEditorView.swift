@@ -39,12 +39,29 @@ public final class FastLineIndex {
         starts.reserveCapacity(max(10, len / 40))
 
         if len > 0 {
-            var i = 0
-            while i < len {
-                if string.character(at: i) == 0x0A { // '\n'
-                    starts.append(i + 1)
+            let bufferSize = 16384
+            var buffer = [unichar](repeating: 0, count: bufferSize)
+            var currentPos = 0
+            while currentPos < len {
+                let chunkSize = min(bufferSize, len - currentPos)
+                string.getCharacters(&buffer, range: NSRange(location: currentPos, length: chunkSize))
+                for j in 0..<chunkSize {
+                    let ch = buffer[j]
+                    if ch == 0x0A { // '\n' (handles LF and CRLF)
+                        starts.append(currentPos + j + 1)
+                    } else if ch == 0x0D { // '\r'
+                        let nextLoc = currentPos + j + 1
+                        if nextLoc < len {
+                            let nextCh = (j + 1 < chunkSize) ? buffer[j + 1] : string.character(at: nextLoc)
+                            if nextCh != 0x0A {
+                                starts.append(nextLoc)
+                            }
+                        } else {
+                            starts.append(nextLoc)
+                        }
+                    }
                 }
-                i += 1
+                currentPos += chunkSize
             }
         }
         self.lineStarts = starts
@@ -911,6 +928,7 @@ public struct MacEditorView: NSViewRepresentable {
             // Fast O(log N) line number calculation with zero heap string allocations:
             let newLine: Int
             if let ruler = textView.enclosingScrollView?.verticalRulerView as? LineNumberRulerView {
+                ruler.lineIndex.update(ifNeeded: text)
                 newLine = ruler.lineIndex.lineNumber(at: safeLoc)
             } else {
                 var lineCount = 1

@@ -421,10 +421,13 @@ public final class SyntaxEngine {
         ], range: fullRange)
 
         let lang = canonicalLanguage(language)
-        if lang == "plain text" || length > 100_000 || !syntaxEnabled {
+        if lang == "plain text" || !syntaxEnabled {
             storage.endEditing()
             return
         }
+
+        let highlightLimit = 100_000
+        let highlightRange = NSRange(location: 0, length: min(length, highlightLimit))
 
         // Active Theme Color Palette
         let keywordColor = activeTheme.keywordColor
@@ -438,10 +441,10 @@ public final class SyntaxEngine {
 
         let boldFont = resolveFont(family: baseFont.familyName ?? baseFont.fontName, size: baseFont.pointSize, bold: true)
 
-        // Helper regex applier using thread-safe compiled regex cache
+        // Helper regex applier using thread-safe compiled regex cache (bounded to highlightRange for O(1) performance)
         func applyRegex(_ pattern: String, options: NSRegularExpression.Options = [], color: NSColor, font: NSFont? = nil) {
             guard let regex = cachedRegex(pattern: pattern, options: options) else { return }
-            let matches = regex.matches(in: text, options: [], range: fullRange)
+            let matches = regex.matches(in: text, options: [], range: highlightRange)
             for m in matches {
                 storage.addAttribute(.foregroundColor, value: color, range: m.range)
                 if let f = font {
@@ -475,7 +478,7 @@ public final class SyntaxEngine {
 
             let combined = alternatives.map { "(" + $0.pattern + ")" }.joined(separator: "|")
             guard let regex = cachedRegex(pattern: combined, options: [.anchorsMatchLines]) else { return }
-            for m in regex.matches(in: text, options: [], range: fullRange) {
+            for m in regex.matches(in: text, options: [], range: highlightRange) {
                 for (index, alt) in alternatives.enumerated() {
                     let r = m.range(at: index + 1)
                     guard r.location != NSNotFound else { continue }

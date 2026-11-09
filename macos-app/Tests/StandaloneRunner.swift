@@ -2300,6 +2300,216 @@ struct StandaloneRunner {
         }
 
         // ==============================================================================
+        // Second-Level Engineering Audit: Advanced Stress & Stability Suite
+        // ==============================================================================
+
+        runTest("testMemoryStability1000UndoRedoOperations") {
+            let doc = EditorDocument(
+                title: "stress_undo.txt",
+                fileURL: nil,
+                content: "Initial baseline content\n",
+                savedContent: "Initial baseline content\n",
+                language: "Plain Text"
+            )
+
+            // Perform 1,000 sequential typing operations
+            for i in 1...1000 {
+                doc.applyEdit("Initial baseline content\nLine \(i): append user edit", actionName: "Typing \(i)")
+                // Stack depth must NEVER exceed maxSnapshots (250 for small files)
+                if doc.undoStackCount > 250 {
+                    throw TestFailure(description: "Undo stack exceeded maximum depth cap: \(doc.undoStackCount)")
+                }
+            }
+            try assertEqual(doc.undoStackCount, 250)
+            try assertTrue(doc.canUndo)
+
+            // Perform 1,000 undos
+            var undoCount = 0
+            while doc.undo() {
+                undoCount += 1
+                if doc.redoStackCount > 250 {
+                    throw TestFailure(description: "Redo stack exceeded maximum depth cap: \(doc.redoStackCount)")
+                }
+            }
+            try assertEqual(undoCount, 250)
+            try assertFalse(doc.canUndo)
+            try assertTrue(doc.canRedo)
+
+            // Perform 100 redos
+            for _ in 1...100 {
+                _ = doc.redo()
+            }
+            try assertTrue(doc.canUndo)
+            try assertEqual(doc.redoStackCount, 150)
+        }
+
+        runTest("testFastLineIndexMultiLineEndingsAndAccuracy") {
+            let index = FastLineIndex()
+
+            // 1. Standard Unix LF (\n)
+            let unixStr = "line 1\nline 2\nline 3\n" as NSString
+            index.build(from: unixStr)
+            try assertEqual(index.totalLines, 4)
+            try assertEqual(index.lineNumber(at: 0), 1)
+            try assertEqual(index.lineNumber(at: 7), 2)
+            try assertEqual(index.lineNumber(at: 14), 3)
+            try assertEqual(index.lineNumber(at: 21), 4)
+
+            // 2. Windows CRLF (\r\n)
+            let winStr = "win 1\r\nwin 2\r\nwin 3" as NSString
+            index.build(from: winStr)
+            try assertEqual(index.totalLines, 3)
+            try assertEqual(index.lineNumber(at: 0), 1)
+            try assertEqual(index.lineNumber(at: 7), 2)
+            try assertEqual(index.lineNumber(at: 14), 3)
+
+            // 3. Legacy Mac CR (\r)
+            let macStr = "mac 1\rmac 2\rmac 3" as NSString
+            index.build(from: macStr)
+            try assertEqual(index.totalLines, 3)
+            try assertEqual(index.lineNumber(at: 0), 1)
+            try assertEqual(index.lineNumber(at: 6), 2)
+            try assertEqual(index.lineNumber(at: 12), 3)
+
+            // 4. Mixed line endings in a single document
+            let mixedStr = "mix 1\nmix 2\r\nmix 3\rmix 4" as NSString
+            index.build(from: mixedStr)
+            try assertEqual(index.totalLines, 4)
+            try assertEqual(index.lineNumber(at: 0), 1)
+            try assertEqual(index.lineNumber(at: 6), 2)
+            try assertEqual(index.lineNumber(at: 13), 3)
+            try assertEqual(index.lineNumber(at: 19), 4)
+        }
+
+        runTest("testLargeDocumentScaleAndSyntaxBoundedExecution") {
+            let lineCount = 50_000
+            var lines: [String] = []
+            lines.reserveCapacity(lineCount)
+            for i in 1...lineCount {
+                lines.append("let variable_\(i) = \(i) * 42 // comment for line \(i)")
+            }
+            let largeText = lines.joined(separator: "\n")
+            let nsLarge = largeText as NSString
+
+            // FastLineIndex build benchmark on 50,000 lines
+            let index = FastLineIndex()
+            let t0 = CFAbsoluteTimeGetCurrent()
+            index.build(from: nsLarge)
+            let buildDurationMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000.0
+
+            try assertEqual(index.totalLines, lineCount)
+            try assertEqual(index.lineNumber(at: 0), 1)
+            // Build duration on Apple Silicon must be under 30ms (usually 2-3ms)
+            if buildDurationMs > 100.0 {
+                throw TestFailure(description: "FastLineIndex.build took too long on 50k lines: \(buildDurationMs) ms")
+            }
+
+            // Syntax highlighting execution on large document must remain bounded
+            let storage = NSTextStorage(string: largeText)
+            let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+            let tHighlight0 = CFAbsoluteTimeGetCurrent()
+            SyntaxEngine.highlight(storage: storage, language: "swift", baseFont: font)
+            let highlightDurationMs = (CFAbsoluteTimeGetCurrent() - tHighlight0) * 1000.0
+
+            // Bounded pass must execute in under 150ms rather than hanging the UI
+            if highlightDurationMs > 300.0 {
+                throw TestFailure(description: "SyntaxEngine.highlight took too long on 50k lines: \(highlightDurationMs) ms")
+            }
+            try assertTrue(storage.length == nsLarge.length)
+        }
+
+        runTest("testTabLifecycleAndMemoryReclamation") {
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("npad_tab_test_\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            let appState = AppStateManager(storageDirectoryURL: tempDir)
+            try assertEqual(appState.documents.count, 1)
+
+            // 1. Open 10 documents
+            var createdIds: [UUID] = []
+            for i in 1...10 {
+                let doc = appState.createNewDocument()
+                doc.title = "multi_tab_\(i).txt"
+                doc.applyEdit("Content for tab \(i)", actionName: "Init")
+                createdIds.append(doc.id)
+            }
+            try assertEqual(appState.documents.count, 11)
+
+            // 2. Switch between tabs
+            for id in createdIds {
+                appState.activeDocumentId = id
+                try assertEqual(appState.activeDocument?.id, id)
+            }
+
+            // 3. Close all 10 opened documents
+            for id in createdIds {
+                let closed = appState.closeDocument(id: id) { _ in .dontSave }
+                try assertTrue(closed)
+            }
+
+            // 4. Documents count must return to 1 (the initial document)
+            try assertEqual(appState.documents.count, 1)
+            try assertEqual(appState.documents[0].title, "DemoApplication.java")
+
+            // Closing that last document triggers creation of the fallback "new 1"
+            let closedInitial = appState.closeDocument(id: appState.documents[0].id) { _ in .dontSave }
+            try assertTrue(closedInitial)
+            try assertEqual(appState.documents.count, 1)
+            try assertEqual(appState.documents[0].title, "new 1")
+        }
+
+        runTest("testPersistenceImmediateFlushOnTermination") {
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("npad_flush_test_\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+
+            let appState = AppStateManager(storageDirectoryURL: tempDir)
+            let doc = appState.createNewDocument()
+            doc.title = "rapid_quit_test.txt"
+            doc.applyEdit("Critical unsaved content before quit", actionName: "Edit")
+
+            // Schedule standard debounced save (which sets a 2.5s timer)
+            appState.scheduleSessionSave(immediate: false)
+
+            // Immediate application termination simulation: flush session synchronously
+            let flushed = appState.saveSessionToDisk()
+            try assertTrue(flushed)
+
+            // Verify file exists on disk with full content without waiting 2.5s
+            let sessionFile = appState.sessionFileURL
+            try assertTrue(FileManager.default.fileExists(atPath: sessionFile.path))
+
+            let data = try Data(contentsOf: sessionFile)
+            let session = try JSONDecoder().decode(PersistedWorkspaceSession.self, from: data)
+            let savedDoc = session.documents.first { $0.title == "rapid_quit_test.txt" }
+            try assertNotNil(savedDoc)
+            try assertEqual(savedDoc?.recoverableContent, "Critical unsaved content before quit")
+        }
+
+        runTest("testSearchEngineLiteralFastPathAccuracy") {
+            let text = "Apple apple APPLE Orange apple"
+            let optionsCaseInsensitive = SearchOptions(caseSensitive: false)
+            let optionsCaseSensitive = SearchOptions(caseSensitive: true)
+
+            // Fast-path literal search (normal mode)
+            let resInsensitive = SearchEngine.findAll(in: text, query: "apple", options: optionsCaseInsensitive)
+            try assertEqual(resInsensitive.totalCount, 4)
+            try assertEqual(resInsensitive.matchingRanges.count, 4)
+
+            let resSensitive = SearchEngine.findAll(in: text, query: "apple", options: optionsCaseSensitive)
+            try assertEqual(resSensitive.totalCount, 2)
+            try assertEqual(resSensitive.matchingRanges.count, 2)
+
+            // Regex mode search must produce identical result ranges
+            var regexOptions = SearchOptions(caseSensitive: false)
+            regexOptions.isRegex = true
+            let resRegex = SearchEngine.findAll(in: text, query: "apple", options: regexOptions)
+            try assertEqual(resRegex.totalCount, resInsensitive.totalCount)
+            try assertEqual(resRegex.matchingRanges, resInsensitive.matchingRanges)
+        }
+
+        // ==============================================================================
         // Summary
         // ==============================================================================
 

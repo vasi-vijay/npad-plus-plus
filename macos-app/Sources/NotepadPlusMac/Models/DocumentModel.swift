@@ -274,6 +274,8 @@ public class EditorDocument: ObservableObject, Identifiable {
     public let undoManager: UndoManager = UndoManager()
     private var undoStack: [DocumentEditSnapshot] = []
     private var redoStack: [DocumentEditSnapshot] = []
+    public var undoStackCount: Int { undoStack.count }
+    public var redoStackCount: Int { redoStack.count }
     private var undoObserverCancellables = Set<AnyCancellable>()
 
     @Published public private(set) var canUndo: Bool = false

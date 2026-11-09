@@ -5,6 +5,7 @@ import AppKit
 /// URLs that arrive before the window has appeared (cold launch) are queued and flushed once a handler exists.
 final class FileOpenCoordinator: NSObject, NSApplicationDelegate {
     private var pendingURLs: [URL] = []
+    weak var appState: AppStateManager?
     var handler: (([URL]) -> Void)? {
         didSet { flushPending() }
     }
@@ -12,6 +13,10 @@ final class FileOpenCoordinator: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         pendingURLs.append(contentsOf: urls)
         flushPending()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        appState?.saveSessionToDisk()
     }
 
     private func flushPending() {
@@ -38,6 +43,7 @@ struct NotepadPlusApp: App {
                 .environmentObject(appState)
                 .frame(minWidth: 900, minHeight: 600)
                 .onAppear {
+                    fileOpenCoordinator.appState = appState
                     fileOpenCoordinator.handler = { urls in
                         appState.openFilesInteractively(urls)
                     }
