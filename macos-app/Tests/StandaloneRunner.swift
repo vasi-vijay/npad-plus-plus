@@ -2533,6 +2533,113 @@ struct StandaloneRunner {
             try assertEqual(color, theme.keywordColor)
         }
 
+        runTest("testSplitPaneDeleteLineFocusIsolation") {
+            let appState = AppStateManager(restorePreviousSession: false)
+            let docLeft = EditorDocument(title: "left.txt", content: "Left Line 1\nLeft Line 2\nLeft Line 3")
+            let docRight = EditorDocument(title: "right.txt", content: "Right Line 1\nRight Line 2\nRight Line 3")
+            appState.documents = [docLeft, docRight]
+            appState.isSplitViewActive = true
+            appState.leftDocumentId = docLeft.id
+            appState.leftActiveDocumentId = docLeft.id
+            appState.rightDocumentId = docRight.id
+            appState.rightActiveDocumentId = docRight.id
+            appState.activePane = .right
+
+            func makeEditor(doc: EditorDocument, side: EditorPaneSide) -> CodePadTextView {
+                let storage = NSTextStorage(string: doc.content)
+                let lm = NSLayoutManager()
+                storage.addLayoutManager(lm)
+                let tc = NSTextContainer(containerSize: NSSize(width: 400, height: 600))
+                lm.addTextContainer(tc)
+                let tv = CodePadTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 600), textContainer: tc)
+                tv.appState = appState
+                tv.document = doc
+                tv.paneSide = side
+                return tv
+            }
+
+            // Setup a window with both Left and Right CodePadTextViews
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+                styleMask: [.titled, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            let container = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+            window.contentView = container
+
+            let leftTV = makeEditor(doc: docLeft, side: .left)
+            let rightTV = makeEditor(doc: docRight, side: .right)
+
+            container.addSubview(leftTV)
+            container.addSubview(rightTV)
+
+            // Focus rightTV
+            window.makeFirstResponder(rightTV)
+            try assertTrue(window.firstResponder === rightTV)
+
+            // Create Control+D key equivalent event
+            let event = NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: .control,
+                timestamp: 0,
+                windowNumber: window.windowNumber,
+                context: nil,
+                characters: "d",
+                charactersIgnoringModifiers: "d",
+                isARepeat: false,
+                keyCode: 2
+            )!
+
+            // In AppKit key equivalent search: leftTV is visited first.
+            // Because leftTV is NOT first responder, it MUST ignore the event and NOT delete line!
+            let leftHandled = leftTV.performKeyEquivalent(with: event)
+            try assertFalse(leftHandled)
+            try assertEqual(leftTV.string, "Left Line 1\nLeft Line 2\nLeft Line 3")
+
+            // rightTV is the first responder, so it MUST handle the event and delete its line!
+            let rightHandled = rightTV.performKeyEquivalent(with: event)
+            try assertTrue(rightHandled)
+            try assertEqual(rightTV.string, "Right Line 2\nRight Line 3")
+            // Left pane must STILL be untouched!
+            try assertEqual(leftTV.string, "Left Line 1\nLeft Line 2\nLeft Line 3")
+
+            // Now switch focus to leftTV
+            window.makeFirstResponder(leftTV)
+            try assertTrue(window.firstResponder === leftTV)
+
+            // When rightTV is NOT first responder, it MUST ignore the event
+            let rightHandledWhenLeftFocused = rightTV.performKeyEquivalent(with: event)
+            try assertFalse(rightHandledWhenLeftFocused)
+            try assertEqual(rightTV.string, "Right Line 2\nRight Line 3")
+
+            // leftTV is first responder now, so it deletes its line
+            let leftHandledWhenFocused = leftTV.performKeyEquivalent(with: event)
+            try assertTrue(leftHandledWhenFocused)
+            try assertEqual(leftTV.string, "Left Line 2\nLeft Line 3")
+        }
+
+        runTest("testTopTabBarFileNavigation") {
+            let appState = AppStateManager(restorePreviousSession: false)
+            let doc1 = EditorDocument(title: "Doc1.txt", content: "1")
+            let doc2 = EditorDocument(title: "Doc2.txt", content: "2")
+            let doc3 = EditorDocument(title: "Doc3.txt", content: "3")
+            appState.documents = [doc1, doc2, doc3]
+            appState.activeDocumentId = doc1.id
+
+            // Verify initial state
+            try assertEqual(appState.activeDocument?.title, "Doc1.txt")
+
+            // Switch to doc2
+            appState.activeDocumentId = doc2.id
+            try assertEqual(appState.activeDocument?.title, "Doc2.txt")
+
+            // Switch to doc3
+            appState.activeDocumentId = doc3.id
+            try assertEqual(appState.activeDocument?.title, "Doc3.txt")
+        }
+
         // ==============================================================================
         // Summary
         // ==============================================================================

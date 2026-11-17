@@ -406,10 +406,13 @@ public struct MacEditorView: NSViewRepresentable {
 
         if let tv = textView as? CodePadTextView {
             tv.paneSide = paneSide
+            tv.document = document
+            tv.appState = appState
         }
         if let ruler = nsView.verticalRulerView as? LineNumberRulerView {
             ruler.paneSide = paneSide
             ruler.appState = appState
+            ruler.document = document
         }
 
         let font = SyntaxEngine.resolveFont(family: fontFamily, size: fontSize)
@@ -1097,6 +1100,21 @@ public class CodePadTextView: NSTextView {
     public override func becomeFirstResponder() -> Bool {
         let ok = super.becomeFirstResponder()
         EditorDiagnostics.log("becomeFirstResponder: \(ok), doc=\(document?.title ?? "")")
+        if ok {
+            if let side = paneSide, let app = appState {
+                app.activePane = side
+                if let doc = document {
+                    app.activeDocumentId = doc.id
+                    if side == .left {
+                        app.leftActiveDocumentId = doc.id
+                        app.leftDocumentId = doc.id
+                    } else if side == .right {
+                        app.rightActiveDocumentId = doc.id
+                        app.rightDocumentId = doc.id
+                    }
+                }
+            }
+        }
         needsDisplay = true
         return ok
     }
@@ -1116,6 +1134,13 @@ public class CodePadTextView: NSTextView {
             app.activePane = side
             if let doc = document {
                 app.activeDocumentId = doc.id
+                if side == .left {
+                    app.leftActiveDocumentId = doc.id
+                    app.leftDocumentId = doc.id
+                } else if side == .right {
+                    app.rightActiveDocumentId = doc.id
+                    app.rightDocumentId = doc.id
+                }
             }
         }
         if window?.firstResponder !== self {
@@ -1394,6 +1419,11 @@ public class CodePadTextView: NSTextView {
     }
 
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if let win = self.window {
+            guard win.firstResponder === self else {
+                return super.performKeyEquivalent(with: event)
+            }
+        }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if flags == .command {
             if let chars = event.charactersIgnoringModifiers?.lowercased() {
@@ -1527,6 +1557,19 @@ public class CodePadTextView: NSTextView {
     public func deleteCurrentLine() {
         completionController.dismiss()
         guard isEditable, textStorage != nil else { return }
+        if let side = paneSide, let app = appState {
+            app.activePane = side
+            if let doc = document {
+                app.activeDocumentId = doc.id
+                if side == .left {
+                    app.leftActiveDocumentId = doc.id
+                    app.leftDocumentId = doc.id
+                } else if side == .right {
+                    app.rightActiveDocumentId = doc.id
+                    app.rightDocumentId = doc.id
+                }
+            }
+        }
         let nsText = (self.string as NSString)
         guard nsText.length > 0 else { return }
 
@@ -1562,6 +1605,19 @@ public class CodePadTextView: NSTextView {
     public func duplicateLine() {
         completionController.dismiss()
         guard isEditable, textStorage != nil else { return }
+        if let side = paneSide, let app = appState {
+            app.activePane = side
+            if let doc = document {
+                app.activeDocumentId = doc.id
+                if side == .left {
+                    app.leftActiveDocumentId = doc.id
+                    app.leftDocumentId = doc.id
+                } else if side == .right {
+                    app.rightActiveDocumentId = doc.id
+                    app.rightDocumentId = doc.id
+                }
+            }
+        }
         let nsText = (self.string as NSString)
         guard nsText.length > 0 else { return }
 
@@ -1919,6 +1975,13 @@ public class LineNumberRulerView: NSRulerView {
             app.activePane = side
             if let doc = document {
                 app.activeDocumentId = doc.id
+                if side == .left {
+                    app.leftActiveDocumentId = doc.id
+                    app.leftDocumentId = doc.id
+                } else if side == .right {
+                    app.rightActiveDocumentId = doc.id
+                    app.rightDocumentId = doc.id
+                }
             }
         }
         let pointInRuler = convert(event.locationInWindow, from: nil)

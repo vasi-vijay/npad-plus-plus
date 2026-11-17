@@ -38,67 +38,162 @@ public struct DocumentTabBar: View {
     @ObservedObject var appState: AppStateManager
 
     public var body: some View {
-        HStack(spacing: 0) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 2) {
-                    ForEach(Array(appState.documents.enumerated()), id: \.element.id) { idx, doc in
-                        // Drop insertion line before tab
-                        if appState.dragTargetPane == nil && appState.dragTargetIndex == idx {
+        ScrollViewReader { proxy in
+            HStack(spacing: 0) {
+                ScrollView(.horizontal, showsIndicators: true) {
+                    HStack(spacing: 2) {
+                        ForEach(Array(appState.documents.enumerated()), id: \.element.id) { idx, doc in
+                            // Drop insertion line before tab
+                            if appState.dragTargetPane == nil && appState.dragTargetIndex == idx {
+                                Rectangle()
+                                    .fill(Color.accentColor)
+                                    .frame(width: 3, height: 26)
+                            }
+
+                            DocumentTabItem(doc: doc, index: idx, appState: appState)
+                                .id(doc.id)
+                        }
+
+                        // Drop insertion line at end
+                        if appState.dragTargetPane == nil && appState.dragTargetIndex == appState.documents.count {
                             Rectangle()
                                 .fill(Color.accentColor)
                                 .frame(width: 3, height: 26)
                         }
 
-                        DocumentTabItem(doc: doc, index: idx, appState: appState)
+                        // Plus button for new document
+                        Button(action: { appState.createNewDocument() }) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 24, height: 24)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("New Tab (⌘N)")
+                        .padding(.leading, 4)
+                        .onHover { inside in
+                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
                     }
-
-                    // Drop insertion line at end
-                    if appState.dragTargetPane == nil && appState.dragTargetIndex == appState.documents.count {
-                        Rectangle()
-                            .fill(Color.accentColor)
-                            .frame(width: 3, height: 26)
-                    }
-
-                    // Plus button for new document
-                    Button(action: { appState.createNewDocument() }) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.secondary)
-                            .frame(width: 24, height: 24)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("New Tab (⌘N)")
-                    .padding(.leading, 4)
-                    .onHover { inside in
-                        if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                    }
+                    .padding(.leading, 6)
+                    .padding(.trailing, 8)
+                    .padding(.top, 4)
                 }
-                .padding(.leading, 6)
-                .padding(.trailing, 8)
-                .padding(.top, 4)
-            }
-            .onDrop(of: ["public.file-url", "public.text"], isTargeted: Binding(
-                get: { appState.dragTargetPane == nil && appState.dragTargetIndex == appState.documents.count },
-                set: { targeted in
-                    if targeted {
-                        appState.dragTargetPane = nil
-                        appState.dragTargetIndex = appState.documents.count
-                    } else if appState.dragTargetPane == nil && appState.dragTargetIndex == appState.documents.count {
+                .onDrop(of: ["public.file-url", "public.text"], isTargeted: Binding(
+                    get: { appState.dragTargetPane == nil && appState.dragTargetIndex == appState.documents.count },
+                    set: { targeted in
+                        if targeted {
+                            appState.dragTargetPane = nil
+                            appState.dragTargetIndex = appState.documents.count
+                        } else if appState.dragTargetPane == nil && appState.dragTargetIndex == appState.documents.count {
+                            appState.dragTargetIndex = nil
+                        }
+                    }
+                )) { providers in
+                    if let draggingId = appState.draggingDocumentId {
+                        appState.reorderDocument(id: draggingId, toIndex: appState.documents.count)
+                        appState.draggingDocumentId = nil
                         appState.dragTargetIndex = nil
+                        return true
+                    }
+                    return appState.openDroppedProviders(providers)
+                }
+                .onChange(of: appState.activeDocumentId) { _, activeId in
+                    if let activeId = activeId {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            proxy.scrollTo(activeId, anchor: .center)
+                        }
                     }
                 }
-            )) { providers in
-                if let draggingId = appState.draggingDocumentId {
-                    appState.reorderDocument(id: draggingId, toIndex: appState.documents.count)
-                    appState.draggingDocumentId = nil
-                    appState.dragTargetIndex = nil
-                    return true
+                .onAppear {
+                    if let activeId = appState.activeDocumentId {
+                        proxy.scrollTo(activeId, anchor: .center)
+                    }
                 }
-                return appState.openDroppedProviders(providers)
-            }
 
-            Spacer(minLength: 0)
+                if appState.documents.count > 1 {
+                    HStack(spacing: 2) {
+                        Button(action: {
+                            if let curId = appState.activeDocumentId,
+                               let idx = appState.documents.firstIndex(where: { $0.id == curId }) {
+                                let prevIdx = max(0, idx - 1)
+                                let targetDoc = appState.documents[prevIdx]
+                                appState.activeDocumentId = targetDoc.id
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    proxy.scrollTo(targetDoc.id, anchor: .center)
+                                }
+                            }
+                        }) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 20, height: 24)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Previous Tab (Scroll Left)")
+                        .onHover { inside in
+                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+
+                        Button(action: {
+                            if let curId = appState.activeDocumentId,
+                               let idx = appState.documents.firstIndex(where: { $0.id == curId }) {
+                                let nextIdx = min(appState.documents.count - 1, idx + 1)
+                                let targetDoc = appState.documents[nextIdx]
+                                appState.activeDocumentId = targetDoc.id
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    proxy.scrollTo(targetDoc.id, anchor: .center)
+                                }
+                            }
+                        }) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 20, height: 24)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Next Tab (Scroll Right)")
+                        .onHover { inside in
+                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+
+                        Menu {
+                            ForEach(appState.documents) { doc in
+                                Button(action: {
+                                    appState.activeDocumentId = doc.id
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        proxy.scrollTo(doc.id, anchor: .center)
+                                    }
+                                }) {
+                                    HStack {
+                                        if doc.id == appState.activeDocumentId {
+                                            Image(systemName: "checkmark")
+                                        }
+                                        Text(doc.title + (doc.isModified ? " *" : ""))
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 20, height: 24)
+                                .contentShape(Rectangle())
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("Open Files List")
+                        .onHover { inside in
+                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+                    }
+                    .padding(.trailing, 6)
+                }
+            }
         }
         .frame(height: 32)
         .background(Color(NSColor.windowBackgroundColor))
@@ -1925,6 +2020,15 @@ public struct EditCommands: Commands {
             }
             .keyboardShortcut("d", modifiers: .command)
 
+            Button("Delete Line (Control+D)") {
+                if let tv = NSApp.keyWindow?.firstResponder as? CodePadTextView {
+                    tv.deleteCurrentLine()
+                } else {
+                    appState.deleteCurrentLine()
+                }
+            }
+            .keyboardShortcut("d", modifiers: .control)
+
             Button("Duplicate Line") {
                 if let tv = NSApp.keyWindow?.firstResponder as? CodePadTextView {
                     tv.duplicateLine()
@@ -3377,88 +3481,209 @@ public struct PaneTabBar: View {
     }
 
     public var body: some View {
-        HStack(spacing: 0) {
-            // Scrollable Tab List
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    ForEach(Array(documents.enumerated()), id: \.element.id) { idx, doc in
-                        // Drop insertion line before tab
-                        if appState.dragTargetPane == paneSide && appState.dragTargetIndex == idx {
+        ScrollViewReader { proxy in
+            HStack(spacing: 0) {
+                // Scrollable Tab List
+                ScrollView(.horizontal, showsIndicators: true) {
+                    HStack(spacing: 0) {
+                        ForEach(Array(documents.enumerated()), id: \.element.id) { idx, doc in
+                            // Drop insertion line before tab
+                            if appState.dragTargetPane == paneSide && appState.dragTargetIndex == idx {
+                                Rectangle()
+                                    .fill(Color.accentColor)
+                                    .frame(width: 3, height: 26)
+                            }
+
+                            PaneTabItem(
+                                document: doc,
+                                paneSide: paneSide,
+                                index: idx,
+                                isActiveTab: doc.id == activeId,
+                                appState: appState
+                            )
+                            .id(doc.id)
+                        }
+
+                        // Drop insertion line at end
+                        if appState.dragTargetPane == paneSide && appState.dragTargetIndex == documents.count {
                             Rectangle()
                                 .fill(Color.accentColor)
                                 .frame(width: 3, height: 26)
                         }
 
-                        PaneTabItem(
-                            document: doc,
-                            paneSide: paneSide,
-                            index: idx,
-                            isActiveTab: doc.id == activeId,
-                            appState: appState
-                        )
-                    }
-
-                    // Drop insertion line at end
-                    if appState.dragTargetPane == paneSide && appState.dragTargetIndex == documents.count {
-                        Rectangle()
-                            .fill(Color.accentColor)
-                            .frame(width: 3, height: 26)
-                    }
-
-                    // Plus button to add tab to this pane
-                    Button(action: {
-                        appState.createNewDocument(pane: paneSide)
-                    }) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 7)
-                    }
-                    .buttonStyle(.plain)
-                    .help("New Tab in \(paneSide.rawValue) Pane")
-                    .onHover { inside in
-                        if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                    }
-                }
-            }
-            .onDrop(of: ["public.file-url", "public.text"], isTargeted: Binding(
-                get: { appState.dragTargetPane == paneSide && appState.dragTargetIndex == documents.count },
-                set: { targeted in
-                    if targeted {
-                        appState.dragTargetPane = paneSide
-                        appState.dragTargetIndex = documents.count
-                    } else if appState.dragTargetPane == paneSide && appState.dragTargetIndex == documents.count {
-                        appState.dragTargetIndex = nil
-                    }
-                }
-            )) { providers in
-                if let draggingId = appState.draggingDocumentId {
-                    appState.moveDocument(id: draggingId, to: paneSide, targetIndex: documents.count)
-                    appState.draggingDocumentId = nil
-                    appState.dragTargetPane = nil
-                    appState.dragTargetIndex = nil
-                    return true
-                }
-                for provider in providers {
-                    if provider.hasItemConformingToTypeIdentifier("public.file-url") {
-                        _ = provider.loadObject(ofClass: NSURL.self) { item, _ in
-                            if let url = item as? URL {
-                                DispatchQueue.main.async {
-                                    appState.openFileInPane(url: url, pane: paneSide)
-                                }
-                            }
+                        // Plus button to add tab to this pane
+                        Button(action: {
+                            appState.createNewDocument(pane: paneSide)
+                        }) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 7)
                         }
+                        .buttonStyle(.plain)
+                        .help("New Tab in \(paneSide.rawValue) Pane")
+                        .onHover { inside in
+                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+                    }
+                }
+                .onDrop(of: ["public.file-url", "public.text"], isTargeted: Binding(
+                    get: { appState.dragTargetPane == paneSide && appState.dragTargetIndex == documents.count },
+                    set: { targeted in
+                        if targeted {
+                            appState.dragTargetPane = paneSide
+                            appState.dragTargetIndex = documents.count
+                        } else if appState.dragTargetPane == paneSide && appState.dragTargetIndex == documents.count {
+                            appState.dragTargetIndex = nil
+                        }
+                    }
+                )) { providers in
+                    if let draggingId = appState.draggingDocumentId {
+                        appState.moveDocument(id: draggingId, to: paneSide, targetIndex: documents.count)
+                        appState.draggingDocumentId = nil
+                        appState.dragTargetPane = nil
+                        appState.dragTargetIndex = nil
                         return true
                     }
+                    for provider in providers {
+                        if provider.hasItemConformingToTypeIdentifier("public.file-url") {
+                            _ = provider.loadObject(ofClass: NSURL.self) { item, _ in
+                                if let url = item as? URL {
+                                    DispatchQueue.main.async {
+                                        appState.openFileInPane(url: url, pane: paneSide)
+                                    }
+                                }
+                            }
+                            return true
+                        }
+                    }
+                    return false
                 }
-                return false
-            }
+                .onChange(of: activeId) { _, newId in
+                    if let newId = newId {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            proxy.scrollTo(newId, anchor: .center)
+                        }
+                    }
+                }
+                .onAppear {
+                    if let id = activeId {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                }
 
-            Spacer()
+                Spacer()
 
-            // Pane controls & badge
-            HStack(spacing: 5) {
+                // Pane Tab Navigation (< > v)
+                if documents.count > 1 {
+                    HStack(spacing: 2) {
+                        Button(action: {
+                            if let curId = activeId,
+                               let idx = documents.firstIndex(where: { $0.id == curId }) {
+                                let prevIdx = max(0, idx - 1)
+                                let targetDoc = documents[prevIdx]
+                                appState.activePane = paneSide
+                                if paneSide == .left {
+                                    appState.leftActiveDocumentId = targetDoc.id
+                                    appState.leftDocumentId = targetDoc.id
+                                } else {
+                                    appState.rightActiveDocumentId = targetDoc.id
+                                    appState.rightDocumentId = targetDoc.id
+                                }
+                                appState.activeDocumentId = targetDoc.id
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    proxy.scrollTo(targetDoc.id, anchor: .center)
+                                }
+                            }
+                        }) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 18, height: 22)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Previous Tab in \(paneSide.rawValue) Pane")
+                        .onHover { inside in
+                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+
+                        Button(action: {
+                            if let curId = activeId,
+                               let idx = documents.firstIndex(where: { $0.id == curId }) {
+                                let nextIdx = min(documents.count - 1, idx + 1)
+                                let targetDoc = documents[nextIdx]
+                                appState.activePane = paneSide
+                                if paneSide == .left {
+                                    appState.leftActiveDocumentId = targetDoc.id
+                                    appState.leftDocumentId = targetDoc.id
+                                } else {
+                                    appState.rightActiveDocumentId = targetDoc.id
+                                    appState.rightDocumentId = targetDoc.id
+                                }
+                                appState.activeDocumentId = targetDoc.id
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    proxy.scrollTo(targetDoc.id, anchor: .center)
+                                }
+                            }
+                        }) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 18, height: 22)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Next Tab in \(paneSide.rawValue) Pane")
+                        .onHover { inside in
+                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+
+                        Menu {
+                            ForEach(documents) { doc in
+                                Button(action: {
+                                    appState.activePane = paneSide
+                                    if paneSide == .left {
+                                        appState.leftActiveDocumentId = doc.id
+                                        appState.leftDocumentId = doc.id
+                                    } else {
+                                        appState.rightActiveDocumentId = doc.id
+                                        appState.rightDocumentId = doc.id
+                                    }
+                                    appState.activeDocumentId = doc.id
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        proxy.scrollTo(doc.id, anchor: .center)
+                                    }
+                                }) {
+                                    HStack {
+                                        if doc.id == activeId {
+                                            Image(systemName: "checkmark")
+                                        }
+                                        Text(doc.title + (doc.isModified ? " *" : ""))
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 18, height: 22)
+                                .contentShape(Rectangle())
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("Files in \(paneSide.rawValue) Pane")
+                        .onHover { inside in
+                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+                    }
+                    .padding(.trailing, 4)
+                }
+
+                // Pane controls & badge
+                HStack(spacing: 5) {
                 Text(paneSide.rawValue.uppercased())
                     .font(.system(size: 9.5, weight: .bold, design: .monospaced))
                     .foregroundColor(isActive ? Color.white : Color.secondary)
@@ -3492,6 +3717,7 @@ public struct PaneTabBar: View {
                 .help("Close \(paneSide.rawValue) Pane")
             }
             .padding(.trailing, 6)
+        }
         }
         .frame(height: 28)
         .background(isActive ? Color.accentColor.opacity(0.08) : Color(NSColor.controlBackgroundColor))
