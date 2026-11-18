@@ -2640,6 +2640,94 @@ struct StandaloneRunner {
             try assertEqual(appState.activeDocument?.title, "Doc3.txt")
         }
 
+        runTest("testTerminalSelectAndCopySupport") {
+            let appState = AppStateManager(restorePreviousSession: false)
+            appState.terminalOutput = [
+                "NPad++ Developer Terminal — zsh / bash",
+                "$ ls -la",
+                "total 0",
+                "drwxr-xr-x 2 user staff 64 Nov 19 04:00 ."
+            ]
+
+            // 1. Test AppStateManager copyTerminalOutput()
+            appState.copyTerminalOutput()
+            let expectedCopied = appState.terminalOutput.joined(separator: "\n")
+            let pbContent = NSPasteboard.general.string(forType: .string)
+            try assertEqual(pbContent, expectedCopied)
+
+            // 2. Test TerminalTextView selection & shortcuts
+            let storage = NSTextStorage(string: expectedCopied)
+            let lm = NSLayoutManager()
+            storage.addLayoutManager(lm)
+            let tc = NSTextContainer(containerSize: NSSize(width: 400, height: 600))
+            lm.addTextContainer(tc)
+            let termView = TerminalTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 600), textContainer: tc)
+            termView.appState = appState
+            try assertTrue(termView.isSelectable)
+            try assertFalse(termView.isEditable)
+
+            // 3. Test Select All via Command+A key equivalent
+            let cmdA = NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: .command,
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                characters: "a",
+                charactersIgnoringModifiers: "a",
+                isARepeat: false,
+                keyCode: 0
+            )!
+            let handledA = termView.performKeyEquivalent(with: cmdA)
+            try assertTrue(handledA)
+            try assertEqual(termView.selectedRange(), NSRange(location: 0, length: (expectedCopied as NSString).length))
+
+            // 4. Test Copy selection via Command+C key equivalent
+            let customSub = "Developer Terminal"
+            let subRange = (expectedCopied as NSString).range(of: customSub)
+            try assertTrue(subRange.location != NSNotFound)
+            termView.setSelectedRange(subRange)
+
+            let cmdC = NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: .command,
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                characters: "c",
+                charactersIgnoringModifiers: "c",
+                isARepeat: false,
+                keyCode: 8
+            )!
+            let handledC = termView.performKeyEquivalent(with: cmdC)
+            try assertTrue(handledC)
+            let copiedSel = NSPasteboard.general.string(forType: .string)
+            try assertEqual(copiedSel, customSub)
+
+            // 5. Test context menu structure
+            let dummyEvent = NSEvent.mouseEvent(
+                with: .rightMouseDown,
+                location: .zero,
+                modifierFlags: [],
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                eventNumber: 1,
+                clickCount: 1,
+                pressure: 1.0
+            )!
+            guard let menu = termView.menu(for: dummyEvent) else {
+                throw TestFailure(description: "Expected non-nil context menu for TerminalTextView")
+            }
+            let titles = menu.items.map { $0.title }
+            try assertTrue(titles.contains("Copy"))
+            try assertTrue(titles.contains("Copy All Output"))
+            try assertTrue(titles.contains("Select All"))
+            try assertTrue(titles.contains("Clear"))
+        }
+
         // ==============================================================================
         // Summary
         // ==============================================================================

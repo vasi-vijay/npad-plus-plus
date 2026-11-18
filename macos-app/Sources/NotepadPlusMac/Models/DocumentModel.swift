@@ -1868,6 +1868,19 @@ public class AppStateManager: ObservableObject {
         terminalOutput.append("[Command cancelled]")
     }
 
+    @Published public var isTerminalCopiedFeedback: Bool = false
+
+    public func copyTerminalOutput() {
+        let fullText = terminalOutput.joined(separator: "\n")
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(fullText, forType: .string)
+        isTerminalCopiedFeedback = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.isTerminalCopiedFeedback = false
+        }
+    }
+
     // MARK: - Run Source Code Directly From Editor (Priority 4)
     public func buildRunPlan(for doc: EditorDocument) -> CodeExecutionPlan {
         let ext = (doc.title as NSString).pathExtension.lowercased()

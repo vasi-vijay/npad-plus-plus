@@ -972,6 +972,234 @@ public struct DocumentSidebar: View {
     }
 }
 
+// MARK: - Native Terminal Console View (Selectable, Copyable, Low-Resource)
+public struct TerminalConsoleView: NSViewRepresentable {
+    @ObservedObject var appState: AppStateManager
+    var isDarkMode: Bool
+
+    public init(appState: AppStateManager, isDarkMode: Bool) {
+        self.appState = appState
+        self.isDarkMode = isDarkMode
+    }
+
+    public func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    public func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = true
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+
+        let textStorage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        textStorage.addLayoutManager(layoutManager)
+
+        let initialWidth = max(scrollView.contentSize.width, 300)
+        let textContainer = NSTextContainer(containerSize: NSSize(width: initialWidth, height: CGFloat.greatestFiniteMagnitude))
+        textContainer.widthTracksTextView = true
+        textContainer.lineFragmentPadding = 4
+        layoutManager.addTextContainer(textContainer)
+
+        let textView = TerminalTextView(frame: NSRect(origin: .zero, size: scrollView.contentSize), textContainer: textContainer)
+        textView.appState = appState
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.allowsUndo = false
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.drawsBackground = true
+        textView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        textView.textContainerInset = NSSize(width: 8, height: 6)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+
+        context.coordinator.textView = textView
+        context.coordinator.scrollView = scrollView
+        context.coordinator.textStorage = textStorage
+
+        scrollView.documentView = textView
+        updateColors(textView: textView, isDark: isDarkMode)
+        updateContent(textView: textView, textStorage: textStorage, lines: appState.terminalOutput, coordinator: context.coordinator)
+
+        return scrollView
+    }
+
+    public func updateNSView(_ nsView: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+        guard let textView = context.coordinator.textView,
+              let textStorage = context.coordinator.textStorage else { return }
+
+        textView.appState = appState
+        updateColors(textView: textView, isDark: isDarkMode)
+        updateContent(textView: textView, textStorage: textStorage, lines: appState.terminalOutput, coordinator: context.coordinator)
+    }
+
+    private func updateColors(textView: NSTextView, isDark: Bool) {
+        let bg = isDark ? NSColor(calibratedWhite: 0.12, alpha: 1.0) : NSColor.textBackgroundColor
+        let fg = isDark ? NSColor(calibratedWhite: 0.90, alpha: 1.0) : NSColor.textColor
+        textView.backgroundColor = bg
+        textView.textColor = fg
+        textView.selectedTextAttributes = [
+            .backgroundColor: isDark ? NSColor.selectedTextBackgroundColor.withAlphaComponent(0.6) : NSColor.selectedTextBackgroundColor,
+            .foregroundColor: fg
+        ]
+    }
+
+    private func updateContent(textView: NSTextView, textStorage: NSTextStorage, lines: [String], coordinator: Coordinator) {
+        let joined = lines.joined(separator: "\n")
+        if coordinator.lastContent == joined {
+            return
+        }
+        coordinator.lastContent = joined
+
+        let isDark = isDarkMode
+        let defaultColor = isDark ? NSColor(calibratedWhite: 0.90, alpha: 1.0) : NSColor.textColor
+        let promptColor = isDark ? NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.45, alpha: 1.0) : NSColor(calibratedRed: 0.10, green: 0.55, blue: 0.20, alpha: 1.0)
+        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+
+        let attrStr = NSMutableAttributedString()
+        for (i, line) in lines.enumerated() {
+            let color = line.contains("$") ? promptColor : defaultColor
+            let lineStr = (i < lines.count - 1) ? (line + "\n") : line
+            let lineAttr = NSAttributedString(string: lineStr, attributes: [
+                .font: font,
+                .foregroundColor: color
+            ])
+            attrStr.append(lineAttr)
+        }
+
+        let savedSelectedRange = textView.selectedRange()
+        textStorage.setAttributedString(attrStr)
+
+        if savedSelectedRange.length > 0 && (savedSelectedRange.location + savedSelectedRange.length <= textStorage.length) {
+            textView.setSelectedRange(savedSelectedRange)
+        } else {
+            DispatchQueue.main.async {
+                textView.scrollRangeToVisible(NSRange(location: textStorage.length, length: 0))
+            }
+        }
+    }
+
+    public class Coordinator {
+        var parent: TerminalConsoleView
+        weak var textView: TerminalTextView?
+        weak var scrollView: NSScrollView?
+        var textStorage: NSTextStorage?
+        var lastContent: String?
+
+        init(_ parent: TerminalConsoleView) {
+            self.parent = parent
+        }
+    }
+}
+
+// MARK: - Terminal TextView with Full Selection & Context Menu
+public class TerminalTextView: NSTextView {
+    public weak var appState: AppStateManager?
+
+    public override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
+        super.init(frame: frameRect, textContainer: container)
+        commonInit()
+    }
+
+    public required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    private func commonInit() {
+        isEditable = false
+        isSelectable = true
+        allowsUndo = false
+        isRichText = false
+        importsGraphics = false
+        drawsBackground = true
+    }
+
+    public override var acceptsFirstResponder: Bool { true }
+    public override var canBecomeKeyView: Bool { true }
+
+    public override func resetCursorRects() {
+        discardCursorRects()
+        addCursorRect(bounds, cursor: .iBeam)
+    }
+
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags == .command {
+            if let chars = event.charactersIgnoringModifiers?.lowercased() {
+                if chars == "c" {
+                    if selectedRange().length > 0 {
+                        self.copy(nil)
+                    } else {
+                        let pb = NSPasteboard.general
+                        pb.clearContents()
+                        pb.setString(self.string, forType: .string)
+                    }
+                    return true
+                }
+                if chars == "a" {
+                    self.selectAll(nil)
+                    return true
+                }
+            }
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    public override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu(title: "Terminal Menu")
+
+        let hasSelection = selectedRange().length > 0
+
+        let copyItem = NSMenuItem(title: "Copy", action: #selector(handleCopySelection), keyEquivalent: "c")
+        copyItem.target = self
+        copyItem.isEnabled = hasSelection
+        menu.addItem(copyItem)
+
+        let copyAllItem = NSMenuItem(title: "Copy All Output", action: #selector(handleCopyAll), keyEquivalent: "")
+        copyAllItem.target = self
+        copyAllItem.isEnabled = !self.string.isEmpty
+        menu.addItem(copyAllItem)
+
+        let selectAllItem = NSMenuItem(title: "Select All", action: #selector(handleSelectAll), keyEquivalent: "a")
+        selectAllItem.target = self
+        selectAllItem.isEnabled = !self.string.isEmpty
+        menu.addItem(selectAllItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let clearItem = NSMenuItem(title: "Clear", action: #selector(handleClear), keyEquivalent: "k")
+        clearItem.target = self
+        menu.addItem(clearItem)
+
+        return menu
+    }
+
+    @objc private func handleCopySelection() {
+        self.copy(nil)
+    }
+
+    @objc private func handleCopyAll() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(self.string, forType: .string)
+    }
+
+    @objc private func handleSelectAll() {
+        self.selectAll(nil)
+    }
+
+    @objc private func handleClear() {
+        appState?.terminalOutput.removeAll()
+    }
+}
+
 // MARK: - Bottom Developer Panel View (Macro-free)
 public struct BottomDeveloperPanel: View {
     @ObservedObject var appState: AppStateManager
@@ -1082,6 +1310,24 @@ public struct BottomDeveloperPanel: View {
                             .font(.system(size: 10, weight: .semibold))
                         }
 
+                        // Copy Terminal Output Button
+                        Button(action: {
+                            appState.copyTerminalOutput()
+                        }) {
+                            HStack(spacing: 3) {
+                                Image(systemName: appState.isTerminalCopiedFeedback ? "checkmark" : "doc.on.doc")
+                                Text(appState.isTerminalCopiedFeedback ? "Copied!" : "Copy Output")
+                            }
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(appState.isTerminalCopiedFeedback ? .green : .secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(NSColor.controlBackgroundColor))
+                            .cornerRadius(3)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy Entire Terminal Output (or ⌘C to copy selection)")
+
                         Button("Clear") {
                             appState.terminalOutput.removeAll()
                         }
@@ -1094,20 +1340,12 @@ public struct BottomDeveloperPanel: View {
                     .background(Color(NSColor.windowBackgroundColor))
                     .overlay(Divider(), alignment: .bottom)
 
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 2) {
-                            ForEach(appState.terminalOutput, id: \.self) { line in
-                                Text(line)
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundColor(line.starts(with: "$") ? .green : .primary)
-                            }
-                        }
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .background(Color(NSColor.textBackgroundColor))
+                    // Selectable, Copyable Terminal Console
+                    TerminalConsoleView(appState: appState, isDarkMode: appState.isDarkMode)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(NSColor.textBackgroundColor))
 
-                    HStack {
+                    HStack(spacing: 6) {
                         let dirName = URL(fileURLWithPath: appState.terminalWorkingDirectory).lastPathComponent
                         Text("\(dirName.isEmpty ? "/" : dirName) ➜")
                             .foregroundColor(.green)
@@ -1118,6 +1356,20 @@ public struct BottomDeveloperPanel: View {
                             .textFieldStyle(.plain)
                             .onSubmit { appState.executeTerminalCommand() }
                             .disabled(appState.isTerminalRunning)
+
+                        if !appState.terminalCommand.isEmpty {
+                            Button(action: {
+                                let pb = NSPasteboard.general
+                                pb.clearContents()
+                                pb.setString(appState.terminalCommand, forType: .string)
+                            }) {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Copy command to clipboard")
+                        }
 
                         Button("Run") { appState.executeTerminalCommand() }
                             .font(.system(size: 11))
