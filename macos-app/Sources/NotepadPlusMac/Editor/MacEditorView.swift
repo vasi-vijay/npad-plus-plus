@@ -1325,6 +1325,36 @@ public class CodePadTextView: NSTextView {
             return
         }
 
+        // Windows/Notepad++ Control key combinations (Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+A, Ctrl+Z, Ctrl+Y)
+        if flags == .control {
+            if let chars = event.charactersIgnoringModifiers?.lowercased() {
+                if chars == "c" {
+                    self.copy(nil)
+                    return
+                }
+                if chars == "v" {
+                    self.paste(nil)
+                    return
+                }
+                if chars == "x" {
+                    self.cut(nil)
+                    return
+                }
+                if chars == "a" {
+                    self.selectAll(nil)
+                    return
+                }
+                if chars == "z" {
+                    self.undoManager?.undo()
+                    return
+                }
+                if chars == "y" {
+                    appState?.redoActiveDocument()
+                    return
+                }
+            }
+        }
+
         // Duplicate Line via Command+Shift+D or Control+Shift+D
         if (flags == [.command, .shift] || flags == [.control, .shift]) && event.charactersIgnoringModifiers?.lowercased() == "d" {
             duplicateLine()
@@ -1439,10 +1469,42 @@ public class CodePadTextView: NSTextView {
                 }
             }
         } else if flags == .control {
-            if let chars = event.charactersIgnoringModifiers?.lowercased(), chars == "d" {
-                EditorDiagnostics.log("performKeyEquivalent: Delete Line via Control+D")
-                deleteCurrentLine()
-                return true
+            if let chars = event.charactersIgnoringModifiers?.lowercased() {
+                if chars == "d" {
+                    EditorDiagnostics.log("performKeyEquivalent: Delete Line via Control+D")
+                    deleteCurrentLine()
+                    return true
+                }
+                if chars == "c" {
+                    EditorDiagnostics.log("performKeyEquivalent: Copy via Control+C")
+                    self.copy(nil)
+                    return true
+                }
+                if chars == "v" {
+                    EditorDiagnostics.log("performKeyEquivalent: Paste via Control+V")
+                    self.paste(nil)
+                    return true
+                }
+                if chars == "x" {
+                    EditorDiagnostics.log("performKeyEquivalent: Cut via Control+X")
+                    self.cut(nil)
+                    return true
+                }
+                if chars == "a" {
+                    EditorDiagnostics.log("performKeyEquivalent: Select All via Control+A")
+                    self.selectAll(nil)
+                    return true
+                }
+                if chars == "z" {
+                    EditorDiagnostics.log("performKeyEquivalent: Undo via Control+Z")
+                    self.undoManager?.undo()
+                    return true
+                }
+                if chars == "y" {
+                    EditorDiagnostics.log("performKeyEquivalent: Redo via Control+Y")
+                    appState?.redoActiveDocument()
+                    return true
+                }
             }
         } else if flags == [.command, .shift] {
             if let chars = event.charactersIgnoringModifiers?.lowercased() {

@@ -1130,18 +1130,23 @@ public class TerminalTextView: NSTextView {
     }
 
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if let win = self.window {
+            guard win.firstResponder === self else {
+                return super.performKeyEquivalent(with: event)
+            }
+        }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if flags == .command {
+        if flags == .command || flags == .control {
             if let chars = event.charactersIgnoringModifiers?.lowercased() {
                 if chars == "c" {
                     if selectedRange().length > 0 {
                         self.copy(nil)
-                    } else {
-                        let pb = NSPasteboard.general
-                        pb.clearContents()
-                        pb.setString(self.string, forType: .string)
+                        return true
+                    } else if flags == .control {
+                        appState?.cancelTerminalCommand()
+                        return true
                     }
-                    return true
+                    return false
                 }
                 if chars == "a" {
                     self.selectAll(nil)

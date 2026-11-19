@@ -2728,6 +2728,122 @@ struct StandaloneRunner {
             try assertTrue(titles.contains("Clear"))
         }
 
+        runTest("testEditorControlCAndControlVDoNotPasteTerminalContent") {
+            let appState = AppStateManager(restorePreviousSession: false)
+            appState.terminalOutput = [
+                "Secret terminal line 1",
+                "Secret terminal line 2"
+            ]
+
+            let doc = EditorDocument(title: "EditorTest.txt", content: "Original Text line 1\nImportant text to copy\nOriginal Text line 3")
+            appState.documents = [doc]
+            appState.activeDocumentId = doc.id
+
+            // Setup a window with both Editor and Terminal views
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+                styleMask: [.titled, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            let container = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+            window.contentView = container
+
+            // Editor
+            let edStorage = NSTextStorage(string: doc.content)
+            let edLM = NSLayoutManager()
+            edStorage.addLayoutManager(edLM)
+            let edTC = NSTextContainer(containerSize: NSSize(width: 400, height: 600))
+            edLM.addTextContainer(edTC)
+            let editorView = CodePadTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 600), textContainer: edTC)
+            editorView.appState = appState
+            editorView.document = doc
+            container.addSubview(editorView)
+
+            // Terminal
+            let termStorage = NSTextStorage(string: appState.terminalOutput.joined(separator: "\n"))
+            let termLM = NSLayoutManager()
+            termStorage.addLayoutManager(termLM)
+            let termTC = NSTextContainer(containerSize: NSSize(width: 400, height: 600))
+            termLM.addTextContainer(termTC)
+            let terminalView = TerminalTextView(frame: NSRect(x: 400, y: 0, width: 400, height: 600), textContainer: termTC)
+            terminalView.appState = appState
+            container.addSubview(terminalView)
+
+            // Focus the editor
+            window.makeFirstResponder(editorView)
+            try assertTrue(window.firstResponder === editorView)
+
+            // Select "Important text to copy" in editor
+            let targetSub = "Important text to copy"
+            let range = (doc.content as NSString).range(of: targetSub)
+            try assertTrue(range.location != NSNotFound)
+            editorView.setSelectedRange(range)
+
+            // When TerminalTextView is NOT first responder, performKeyEquivalent(Cmd+C) or (Ctrl+C) MUST NOT handle event and MUST NOT overwrite pasteboard!
+            let cmdC = NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: .command,
+                timestamp: 0,
+                windowNumber: window.windowNumber,
+                context: nil,
+                characters: "c",
+                charactersIgnoringModifiers: "c",
+                isARepeat: false,
+                keyCode: 8
+            )!
+            let termHandledCmdC = terminalView.performKeyEquivalent(with: cmdC)
+            try assertFalse(termHandledCmdC)
+
+            let ctrlC = NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: .control,
+                timestamp: 0,
+                windowNumber: window.windowNumber,
+                context: nil,
+                characters: "c",
+                charactersIgnoringModifiers: "c",
+                isARepeat: false,
+                keyCode: 8
+            )!
+            let termHandledCtrlC = terminalView.performKeyEquivalent(with: ctrlC)
+            try assertFalse(termHandledCtrlC)
+
+            // Editor handles Control+C
+            let editorHandledCtrlC = editorView.performKeyEquivalent(with: ctrlC)
+            try assertTrue(editorHandledCtrlC)
+
+            // Verify pasteboard contains "Important text to copy" and NOT any terminal text!
+            let pbString = NSPasteboard.general.string(forType: .string)
+            try assertEqual(pbString, targetSub)
+            try assertFalse(pbString?.contains("Secret terminal") ?? true)
+
+            // Now test Control+V in editor
+            let endRange = NSRange(location: (editorView.string as NSString).length, length: 0)
+            editorView.setSelectedRange(endRange)
+
+            let ctrlV = NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: .control,
+                timestamp: 0,
+                windowNumber: window.windowNumber,
+                context: nil,
+                characters: "v",
+                charactersIgnoringModifiers: "v",
+                isARepeat: false,
+                keyCode: 9
+            )!
+            let editorHandledCtrlV = editorView.performKeyEquivalent(with: ctrlV)
+            try assertTrue(editorHandledCtrlV)
+
+            // Verify editor string now ends with "Important text to copy" and NOT terminal output
+            try assertTrue(editorView.string.hasSuffix(targetSub))
+            try assertFalse(editorView.string.contains("Secret terminal"))
+        }
+
         // ==============================================================================
         // Summary
         // ==============================================================================
