@@ -992,7 +992,8 @@ public struct TerminalConsoleView: NSViewRepresentable {
         scrollView.drawsBackground = true
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
+        scrollView.autohidesScrollers = false
+        scrollView.scrollerStyle = .overlay
 
         let textStorage = NSTextStorage()
         let layoutManager = NSLayoutManager()
@@ -1014,6 +1015,8 @@ public struct TerminalConsoleView: NSViewRepresentable {
         textView.drawsBackground = true
         textView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         textView.textContainerInset = NSSize(width: 8, height: 6)
+        textView.minSize = NSSize(width: 0, height: max(scrollView.contentSize.height, 100))
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
@@ -1021,10 +1024,33 @@ public struct TerminalConsoleView: NSViewRepresentable {
         context.coordinator.textView = textView
         context.coordinator.scrollView = scrollView
         context.coordinator.textStorage = textStorage
+        context.coordinator.layoutManager = layoutManager
+        context.coordinator.textContainer = textContainer
 
         scrollView.documentView = textView
+
+        // Listen for frame resizing to ensure width and vertical bounds track the view without glitches
+        scrollView.postsFrameChangedNotifications = true
+        let token = NotificationCenter.default.addObserver(
+            forName: NSView.frameDidChangeNotification,
+            object: scrollView,
+            queue: .main
+        ) { [weak textView, weak scrollView, weak layoutManager, weak textContainer] _ in
+            guard let sv = scrollView, let tv = textView, let lm = layoutManager, let tc = textContainer else { return }
+            let width = sv.contentSize.width
+            if width > 0 {
+                tc.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+                lm.ensureLayout(for: tc)
+                let usedRect = lm.usedRect(for: tc)
+                let contentHeight = max(usedRect.height + tv.textContainerInset.height * 2 + 12, sv.contentSize.height)
+                tv.frame = NSRect(x: 0, y: 0, width: width, height: contentHeight)
+                tv.minSize = NSSize(width: 0, height: sv.contentSize.height)
+            }
+        }
+        context.coordinator.observerTokens.append(token)
+
         updateColors(textView: textView, isDark: isDarkMode)
-        updateContent(textView: textView, textStorage: textStorage, lines: appState.terminalOutput, coordinator: context.coordinator)
+        updateContent(textView: textView, textStorage: textStorage, layoutManager: layoutManager, textContainer: textContainer, scrollView: scrollView, lines: appState.terminalOutput, coordinator: context.coordinator)
 
         return scrollView
     }
@@ -1032,11 +1058,13 @@ public struct TerminalConsoleView: NSViewRepresentable {
     public func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.parent = self
         guard let textView = context.coordinator.textView,
-              let textStorage = context.coordinator.textStorage else { return }
+              let textStorage = context.coordinator.textStorage,
+              let layoutManager = context.coordinator.layoutManager,
+              let textContainer = context.coordinator.textContainer else { return }
 
         textView.appState = appState
         updateColors(textView: textView, isDark: isDarkMode)
-        updateContent(textView: textView, textStorage: textStorage, lines: appState.terminalOutput, coordinator: context.coordinator)
+        updateContent(textView: textView, textStorage: textStorage, layoutManager: layoutManager, textContainer: textContainer, scrollView: nsView, lines: appState.terminalOutput, coordinator: context.coordinator)
     }
 
     private func updateColors(textView: NSTextView, isDark: Bool) {
@@ -1050,7 +1078,15 @@ public struct TerminalConsoleView: NSViewRepresentable {
         ]
     }
 
-    private func updateContent(textView: NSTextView, textStorage: NSTextStorage, lines: [String], coordinator: Coordinator) {
+    private func updateContent(
+        textView: NSTextView,
+        textStorage: NSTextStorage,
+        layoutManager: NSLayoutManager,
+        textContainer: NSTextContainer,
+        scrollView: NSScrollView,
+        lines: [String],
+        coordinator: Coordinator
+    ) {
         let joined = lines.joined(separator: "\n")
         if coordinator.lastContent == joined {
             return
@@ -1060,14 +1096,20 @@ public struct TerminalConsoleView: NSViewRepresentable {
         let isDark = isDarkMode
         let defaultColor = isDark ? NSColor(calibratedWhite: 0.90, alpha: 1.0) : NSColor.textColor
         let promptColor = isDark ? NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.45, alpha: 1.0) : NSColor(calibratedRed: 0.10, green: 0.55, blue: 0.20, alpha: 1.0)
+        let headerColor = isDark ? NSColor(calibratedRed: 0.45, green: 0.80, blue: 1.0, alpha: 1.0) : NSColor(calibratedRed: 0.10, green: 0.40, blue: 0.85, alpha: 1.0)
         let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        let boldFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
 
         let attrStr = NSMutableAttributedString()
         for (i, line) in lines.enumerated() {
-            let color = line.contains("$") ? promptColor : defaultColor
+            let isHeader = line.hasPrefix("[Running ") || line.hasPrefix("[Run File]")
+            let isPrompt = line.contains("$") || line.hasPrefix("[")
+            let color = isHeader ? headerColor : (isPrompt ? promptColor : defaultColor)
+            let usedFont = isHeader ? boldFont : font
+
             let lineStr = (i < lines.count - 1) ? (line + "\n") : line
             let lineAttr = NSAttributedString(string: lineStr, attributes: [
-                .font: font,
+                .font: usedFont,
                 .foregroundColor: color
             ])
             attrStr.append(lineAttr)
@@ -1076,11 +1118,29 @@ public struct TerminalConsoleView: NSViewRepresentable {
         let savedSelectedRange = textView.selectedRange()
         textStorage.setAttributedString(attrStr)
 
+        // Ensure full text height layout is evaluated so the documentView expands in the scroll view
+        let containerWidth = max(scrollView.contentSize.width, 200)
+        textContainer.containerSize = NSSize(width: containerWidth, height: CGFloat.greatestFiniteMagnitude)
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        let contentHeight = max(usedRect.height + textView.textContainerInset.height * 2 + 12, scrollView.contentSize.height)
+
+        var frame = textView.frame
+        frame.size.width = containerWidth
+        frame.size.height = contentHeight
+        textView.frame = frame
+
+        // If the user has active selection, preserve it; otherwise auto-scroll to the latest run at the bottom
         if savedSelectedRange.length > 0 && (savedSelectedRange.location + savedSelectedRange.length <= textStorage.length) {
             textView.setSelectedRange(savedSelectedRange)
         } else {
-            DispatchQueue.main.async {
-                textView.scrollRangeToVisible(NSRange(location: textStorage.length, length: 0))
+            DispatchQueue.main.async { [weak textView, weak scrollView] in
+                guard let tv = textView, let sv = scrollView else { return }
+                tv.scrollRangeToVisible(NSRange(location: textStorage.length, length: 0))
+                let clipView = sv.contentView
+                let maxY = max(0, tv.frame.height - clipView.bounds.height)
+                clipView.scroll(to: NSPoint(x: 0, y: maxY))
+                sv.reflectScrolledClipView(clipView)
             }
         }
     }
@@ -1090,10 +1150,20 @@ public struct TerminalConsoleView: NSViewRepresentable {
         weak var textView: TerminalTextView?
         weak var scrollView: NSScrollView?
         var textStorage: NSTextStorage?
+        var layoutManager: NSLayoutManager?
+        var textContainer: NSTextContainer?
         var lastContent: String?
+        var observerTokens: [Any] = []
 
         init(_ parent: TerminalConsoleView) {
             self.parent = parent
+        }
+
+        deinit {
+            for token in observerTokens {
+                NotificationCenter.default.removeObserver(token)
+            }
+            observerTokens.removeAll()
         }
     }
 }
@@ -1965,6 +2035,9 @@ extension AppStateManager {
 
         let dirName = URL(fileURLWithPath: terminalWorkingDirectory).lastPathComponent
         terminalOutput.append("[\(dirName.isEmpty ? "/" : dirName)] $ \(cmd)")
+        if terminalOutput.count > 2500 {
+            terminalOutput.removeFirst(terminalOutput.count - 2500)
+        }
 
         // Handle 'cd' directory changes with working directory persistence
         if cmd == "cd" || cmd.hasPrefix("cd ") {
@@ -2019,6 +2092,9 @@ extension AppStateManager {
                         self.terminalOutput.append(cleaned)
                     } else if process.terminationStatus != 0 {
                         self.terminalOutput.append("[Process exited with code \(process.terminationStatus)]")
+                    }
+                    if self.terminalOutput.count > 2500 {
+                        self.terminalOutput.removeFirst(self.terminalOutput.count - 2500)
                     }
                 }
             } catch {
@@ -2151,8 +2227,16 @@ extension AppStateManager {
         isBottomPanelVisible = true
         activeBottomTab = "Terminal"
 
+        // Cancel previous long-running task to prevent orphan processes from consuming battery and CPU
+        if isTerminalRunning {
+            cancelTerminalCommand()
+        }
+
         let plan = buildRunPlan(for: doc)
         if !plan.supported {
+            if !terminalOutput.isEmpty && terminalOutput.last != "" {
+                terminalOutput.append("")
+            }
             terminalOutput.append("[Run File] \(plan.errorMessage ?? "Unsupported file type.")")
             return
         }
@@ -2163,6 +2247,9 @@ extension AppStateManager {
         }
 
         _ = changeTerminalDirectory(to: plan.workingDirectory)
+        if !terminalOutput.isEmpty && terminalOutput.last != "" {
+            terminalOutput.append("")
+        }
         terminalOutput.append("[Running \(doc.title) (\(plan.language))]")
         terminalCommand = plan.command
         executeTerminalCommand()

@@ -2844,6 +2844,115 @@ struct StandaloneRunner {
             try assertFalse(editorView.string.contains("Secret terminal"))
         }
 
+        // ------------------------------------------------------------------------------
+        // Test 102: Terminal Scrollable & Multi-Run History Preservation
+        // ------------------------------------------------------------------------------
+        runTest("testTerminalScrollableAndMultiRunHistory") {
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("term_scroll_test_\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+            let appState = AppStateManager(storageDirectoryURL: tempDir, restorePreviousSession: false)
+            appState.terminalOutput.removeAll()
+
+            // Setup ScrollView and TerminalTextView simulating TerminalConsoleView
+            let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 400, height: 180))
+            scrollView.hasVerticalScroller = true
+            scrollView.hasHorizontalScroller = false
+            scrollView.autohidesScrollers = false
+
+            let textStorage = NSTextStorage()
+            let layoutManager = NSLayoutManager()
+            textStorage.addLayoutManager(layoutManager)
+
+            let textContainer = NSTextContainer(containerSize: NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude))
+            textContainer.widthTracksTextView = true
+            textContainer.lineFragmentPadding = 4
+            layoutManager.addTextContainer(textContainer)
+
+            let textView = TerminalTextView(frame: NSRect(origin: .zero, size: scrollView.contentSize), textContainer: textContainer)
+            textView.appState = appState
+            textView.minSize = NSSize(width: 0, height: max(scrollView.contentSize.height, 100))
+            textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            textView.isVerticallyResizable = true
+            textView.isHorizontallyResizable = false
+            textView.autoresizingMask = [.width]
+            scrollView.documentView = textView
+
+            // Step 1: Run 1 - Execute First File
+            let doc1 = EditorDocument(title: "Main.py", content: "print('Hello from Main')", language: "Python")
+            appState.documents = [doc1]
+            appState.activeDocument = doc1
+
+            appState.terminalOutput.append("[Running \(doc1.title) (Python)]")
+            appState.terminalOutput.append("[workspace] $ python3 \"Main.py\"")
+            for i in 1...15 {
+                appState.terminalOutput.append("Main.py log line \(i): step completed successfully")
+            }
+
+            // Sync with text storage and layout
+            let joined1 = appState.terminalOutput.joined(separator: "\n")
+            textStorage.setAttributedString(NSAttributedString(string: joined1))
+            layoutManager.ensureLayout(for: textContainer)
+            let used1 = layoutManager.usedRect(for: textContainer)
+            let height1 = max(used1.height + textView.textContainerInset.height * 2 + 12, scrollView.contentSize.height)
+            textView.frame = NSRect(x: 0, y: 0, width: scrollView.contentSize.width, height: height1)
+
+            // Step 2: Run 2 - Execute a New Second File without losing Run 1
+            let doc2 = EditorDocument(title: "Utils.java", content: "public class Utils {}", language: "Java")
+            appState.documents.append(doc2)
+            appState.activeDocument = doc2
+
+            if !appState.terminalOutput.isEmpty && appState.terminalOutput.last != "" {
+                appState.terminalOutput.append("")
+            }
+            appState.terminalOutput.append("[Running \(doc2.title) (\(doc2.language))]")
+            appState.terminalOutput.append("[workspace] $ javac Utils.java && java Utils")
+            for i in 1...20 {
+                appState.terminalOutput.append("Utils.java worker \(i): executed cleanly")
+            }
+
+            // Sync with text storage and layout for multi-run
+            let joined2 = appState.terminalOutput.joined(separator: "\n")
+            textStorage.setAttributedString(NSAttributedString(string: joined2))
+            layoutManager.ensureLayout(for: textContainer)
+            let used2 = layoutManager.usedRect(for: textContainer)
+            let height2 = max(used2.height + textView.textContainerInset.height * 2 + 12, scrollView.contentSize.height)
+            textView.frame = NSRect(x: 0, y: 0, width: scrollView.contentSize.width, height: height2)
+
+            // Verify both old run (Main.py) and latest run (Utils.java) are retained
+            try assertTrue(appState.terminalOutput.contains(where: { $0.contains("Running Main.py") }))
+            try assertTrue(appState.terminalOutput.contains(where: { $0.contains("Running Utils.java") }))
+            try assertTrue(textView.string.contains("Main.py log line 1"))
+            try assertTrue(textView.string.contains("Utils.java worker 20"))
+
+            // Verify terminal height expanded beyond visible viewport so it is vertically scrollable!
+            try assertTrue(textView.frame.height > scrollView.contentSize.height)
+            try assertTrue(scrollView.hasVerticalScroller)
+
+            // Verify scrolling: ClipView can scroll from top to the latest run at bottom
+            let clipView = scrollView.contentView
+            let maxY = max(0, textView.frame.height - clipView.bounds.height)
+            try assertTrue(maxY > 100)
+
+            // Scroll to bottom (latest runned one visible)
+            clipView.scroll(to: NSPoint(x: 0, y: maxY))
+            scrollView.reflectScrolledClipView(clipView)
+            try assertEqual(clipView.bounds.origin.y, maxY)
+
+            // Scroll to top (old runs visible)
+            clipView.scroll(to: NSPoint(x: 0, y: 0))
+            scrollView.reflectScrolledClipView(clipView)
+            try assertEqual(clipView.bounds.origin.y, 0)
+
+            // Verify memory bounds trimming (2500 entries)
+            for k in 1...3000 {
+                appState.terminalOutput.append("Stress line \(k)")
+                if appState.terminalOutput.count > 2500 {
+                    appState.terminalOutput.removeFirst(appState.terminalOutput.count - 2500)
+                }
+            }
+            try assertEqual(appState.terminalOutput.count, 2500)
+        }
+
         // ==============================================================================
         // Summary
         // ==============================================================================
