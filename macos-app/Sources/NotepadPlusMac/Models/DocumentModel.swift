@@ -2620,37 +2620,112 @@ public class AppStateManager: ObservableObject {
 
     public func toggleComment() {
         guard let doc = activeDocument else { return }
-        var lines = doc.content.components(separatedBy: "\n")
-        guard !lines.isEmpty else { return }
-        let targetIdx = max(0, min(doc.cursorLine - 1, lines.count - 1))
-        let savedLine = doc.cursorLine
-        let savedCol = doc.cursorColumn
-        let rawLine = lines[targetIdx]
-        let carriageReturn = rawLine.hasSuffix("\r") ? "\r" : ""
-        let line = carriageReturn.isEmpty ? rawLine : String(rawLine.dropLast())
         let (prefix, suffix) = SyntaxEngine.commentDelimiters(for: doc.language)
         let trimmedPrefix = prefix.trimmingCharacters(in: .whitespaces)
         let trimmedSuffix = suffix?.trimmingCharacters(in: .whitespaces)
 
-        let trimmedLine = line.trimmingCharacters(in: .whitespaces)
-        let isCommented = trimmedLine.hasPrefix(trimmedPrefix) && (trimmedSuffix.map { trimmedLine.hasSuffix($0) } ?? true)
-        if isCommented {
-            var modified = line
-            if let range = modified.range(of: prefix) ?? modified.range(of: trimmedPrefix) {
-                modified.removeSubrange(range)
-            }
-            if let closeMark = suffix, let range = modified.range(of: closeMark, options: .backwards)
-                ?? modified.range(of: trimmedSuffix ?? closeMark, options: .backwards) {
-                modified.removeSubrange(range)
-            }
-            lines[targetIdx] = modified + carriageReturn
-        } else {
-            lines[targetIdx] = prefix + line + (suffix ?? "") + carriageReturn
+        let nsText = (doc.content as NSString)
+        guard nsText.length > 0 else {
+            let newContent = prefix + (suffix ?? "")
+            doc.applyEdit(newContent, newSelectedRange: NSRange(location: (newContent as NSString).length, length: 0), actionName: "Toggle Comment")
+            scheduleSessionSave()
+            return
         }
-        let newContent = lines.joined(separator: "\n")
-        let newLoc = doc.characterIndex(forLine: savedLine, column: savedCol, in: newContent)
-        doc.applyEdit(newContent, newSelectedRange: NSRange(location: newLoc, length: 0), actionName: "Toggle Comment")
-        doc.cursorLine = savedLine
+
+        let sel = doc.selectedRange
+        let affectedRange: NSRange
+        if sel.length > 0 {
+            let start = sel.location
+            let end = sel.location + sel.length
+            var effectiveEnd = end
+            if effectiveEnd > start && nsText.character(at: effectiveEnd - 1) == 0x0A {
+                effectiveEnd -= 1
+                if effectiveEnd > start && nsText.character(at: effectiveEnd - 1) == 0x0D {
+                    effectiveEnd -= 1
+                }
+            }
+            affectedRange = nsText.lineRange(for: NSRange(location: start, length: max(0, effectiveEnd - start)))
+        } else {
+            let loc = doc.characterIndex(forLine: doc.cursorLine, column: doc.cursorColumn, in: doc.content)
+            let clamped = min(max(0, loc), max(0, nsText.length - 1))
+            affectedRange = nsText.lineRange(for: NSRange(location: clamped, length: 0))
+        }
+
+        let affectedText = nsText.substring(with: affectedRange)
+        let rawLines = affectedText.components(separatedBy: "\n")
+
+        var allCommented = true
+        var nonEmpties = 0
+        for (i, rawLine) in rawLines.enumerated() {
+            if i == rawLines.count - 1 && rawLine.isEmpty && affectedText.hasSuffix("\n") { continue }
+            let cr = rawLine.hasSuffix("\r") ? "\r" : ""
+            let line = cr.isEmpty ? rawLine : String(rawLine.dropLast())
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            nonEmpties += 1
+            let isCom = trimmed.hasPrefix(trimmedPrefix) && (trimmedSuffix.map { trimmed.hasSuffix($0) } ?? true)
+            if !isCom {
+                allCommented = false
+                break
+            }
+        }
+        let shouldUncomment = (nonEmpties > 0 && allCommented)
+
+        var modifiedLines: [String] = []
+        var totalDelta = 0
+        var firstLineDelta = 0
+
+        for (i, rawLine) in rawLines.enumerated() {
+            if i == rawLines.count - 1 && rawLine.isEmpty && affectedText.hasSuffix("\n") {
+                modifiedLines.append("")
+                continue
+            }
+            let cr = rawLine.hasSuffix("\r") ? "\r" : ""
+            var line = cr.isEmpty ? rawLine : String(rawLine.dropLast())
+            let originalLen = line.count
+
+            if shouldUncomment {
+                if let r = line.range(of: prefix) {
+                    line.removeSubrange(r)
+                } else if let r = line.range(of: trimmedPrefix) {
+                    line.removeSubrange(r)
+                }
+                if let closeMark = suffix {
+                    if let r = line.range(of: closeMark, options: .backwards) ?? line.range(of: trimmedSuffix ?? closeMark, options: .backwards) {
+                        line.removeSubrange(r)
+                    }
+                }
+            } else {
+                line = prefix + line + (suffix ?? "")
+            }
+            let delta = line.count - originalLen
+            totalDelta += delta
+            if i == 0 {
+                firstLineDelta = delta
+            }
+            modifiedLines.append(line + cr)
+        }
+
+        let replacement = modifiedLines.joined(separator: "\n")
+        let newContent = nsText.replacingCharacters(in: affectedRange, with: replacement)
+
+        let newStart: Int
+        let newLength: Int
+        if sel.length > 0 {
+            if sel.location == affectedRange.location {
+                newStart = sel.location
+                newLength = max(0, sel.length + totalDelta)
+            } else {
+                newStart = max(affectedRange.location, sel.location + firstLineDelta)
+                newLength = max(0, sel.length + (totalDelta - firstLineDelta))
+            }
+        } else {
+            newStart = max(affectedRange.location, sel.location + firstLineDelta)
+            newLength = 0
+        }
+        let newSel = NSRange(location: newStart, length: newLength)
+
+        doc.applyEdit(newContent, newSelectedRange: newSel, actionName: "Toggle Comment")
         scheduleSessionSave()
     }
 

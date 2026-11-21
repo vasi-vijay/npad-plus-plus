@@ -2953,6 +2953,122 @@ struct StandaloneRunner {
             try assertEqual(appState.terminalOutput.count, 2500)
         }
 
+        // ------------------------------------------------------------------------------
+        // Test 103: Multi-line Tab Indentation & Shift+Tab Unindentation
+        // ------------------------------------------------------------------------------
+        runTest("testMultiLineTabIndentationAndShiftTabUnindentation") {
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("tab_indent_test_\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+            let appState = AppStateManager(storageDirectoryURL: tempDir, restorePreviousSession: false)
+
+            let initialText = "lineA\nlineB\nlineC\n"
+            let doc = EditorDocument(title: "Test.java", content: initialText, language: "Java")
+            appState.documents = [doc]
+            appState.activeDocument = doc
+
+            let storage = NSTextStorage(string: doc.content)
+            let lm = NSLayoutManager()
+            storage.addLayoutManager(lm)
+            let tc = NSTextContainer(containerSize: NSSize(width: 500, height: 1000))
+            lm.addTextContainer(tc)
+
+            let textView = CodePadTextView(frame: NSRect(x: 0, y: 0, width: 500, height: 1000), textContainer: tc)
+            textView.appState = appState
+            textView.document = doc
+
+            // Select lineA and lineB (first 2 lines)
+            let ns = (textView.string as NSString)
+            let selRange = ns.range(of: "lineA\nlineB\n")
+            try assertTrue(selRange.location != NSNotFound)
+            textView.setSelectedRange(selRange)
+
+            // Indent lines (simulates pressing Tab key with lines selected)
+            textView.indentSelectedLines()
+
+            // Verify lines are NOT removed and each selected line is indented by 4 spaces
+            try assertTrue(textView.string.contains("    lineA"))
+            try assertTrue(textView.string.contains("    lineB"))
+            try assertTrue(textView.string.contains("lineC"))
+            try assertFalse(textView.string.contains("    lineC"))
+            try assertEqual(textView.string, "    lineA\n    lineB\nlineC\n")
+
+            // Verify selection was expanded to keep lines selected
+            try assertTrue(textView.selectedRange().length > 0)
+
+            // Indent once more (8 spaces)
+            textView.indentSelectedLines()
+            try assertEqual(textView.string, "        lineA\n        lineB\nlineC\n")
+
+            // Unindent (Shift+Tab) back to 4 spaces
+            textView.unindentSelectedLines()
+            try assertEqual(textView.string, "    lineA\n    lineB\nlineC\n")
+
+            // Unindent once more back to original
+            textView.unindentSelectedLines()
+            try assertEqual(textView.string, "lineA\nlineB\nlineC\n")
+        }
+
+        // ------------------------------------------------------------------------------
+        // Test 104: Java Multi-line Selection Toggle Comment (Cmd+/)
+        // ------------------------------------------------------------------------------
+        runTest("testJavaMultiLineSelectionToggleComment") {
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("java_comment_test_\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+            let appState = AppStateManager(storageDirectoryURL: tempDir, restorePreviousSession: false)
+
+            let javaCode = "public class Example {\n    int x = 10;\n    int y = 20;\n    int z = 30;\n}\n"
+            let doc = EditorDocument(title: "Example.java", content: javaCode, language: "Java")
+            appState.documents = [doc]
+            appState.activeDocument = doc
+
+            let storage = NSTextStorage(string: doc.content)
+            let lm = NSLayoutManager()
+            storage.addLayoutManager(lm)
+            let tc = NSTextContainer(containerSize: NSSize(width: 500, height: 1000))
+            lm.addTextContainer(tc)
+
+            let textView = CodePadTextView(frame: NSRect(x: 0, y: 0, width: 500, height: 1000), textContainer: tc)
+            textView.appState = appState
+            textView.document = doc
+
+            // Select all 3 field lines (int x, y, z)
+            let ns = (textView.string as NSString)
+            let selRange = ns.range(of: "int x = 10;\n    int y = 20;\n    int z = 30;\n")
+            try assertTrue(selRange.location != NSNotFound)
+            textView.setSelectedRange(selRange)
+
+            // Trigger Cmd+/ toggle comment
+            textView.toggleCommentForSelection()
+
+            // Verify ALL 3 selected lines are commented with '// '
+            try assertTrue(textView.string.contains("//     int x = 10;"))
+            try assertTrue(textView.string.contains("//     int y = 20;"))
+            try assertTrue(textView.string.contains("//     int z = 30;"))
+            try assertFalse(textView.string.contains("// public class"))
+
+            // Verify selection was updated to keep the commented lines selected
+            try assertTrue(textView.selectedRange().length > 0)
+
+            // Trigger Cmd+/ again to uncomment
+            textView.toggleCommentForSelection()
+
+            // Verify all 3 lines are uncommented back to original state
+            try assertFalse(textView.string.contains("//"))
+            try assertTrue(textView.string.contains("    int x = 10;"))
+            try assertTrue(textView.string.contains("    int y = 20;"))
+            try assertTrue(textView.string.contains("    int z = 30;"))
+
+            // Also test AppStateManager.toggleComment() on multi-line selection
+            doc.selectedRange = selRange
+            appState.toggleComment()
+            try assertTrue(doc.content.contains("//     int x = 10;"))
+            try assertTrue(doc.content.contains("//     int y = 20;"))
+            try assertTrue(doc.content.contains("//     int z = 30;"))
+
+            appState.toggleComment()
+            try assertFalse(doc.content.contains("//"))
+        }
+
         // ==============================================================================
         // Summary
         // ==============================================================================

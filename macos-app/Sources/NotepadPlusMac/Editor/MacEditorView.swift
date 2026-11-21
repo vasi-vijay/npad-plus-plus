@@ -910,11 +910,22 @@ public struct MacEditorView: NSViewRepresentable {
             return parent.document.undoManager
         }
 
-        // Intercept Tab key to insert 4 spaces instead of shifting keyboard focus
+        // Intercept Tab and Backtab (Shift+Tab) to indent/unindent selected lines or insert 4 spaces
         public func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             if commandSelector == #selector(NSResponder.insertTab(_:)) {
-                textView.insertText("    ", replacementRange: textView.selectedRange())
-                return true
+                if let cpTextView = textView as? CodePadTextView, cpTextView.selectedRange().length > 0 {
+                    cpTextView.indentSelectedLines()
+                    return true
+                } else {
+                    textView.insertText("    ", replacementRange: textView.selectedRange())
+                    return true
+                }
+            }
+            if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
+                if let cpTextView = textView as? CodePadTextView {
+                    cpTextView.unindentSelectedLines()
+                    return true
+                }
             }
             return false
         }
@@ -1319,6 +1330,28 @@ public class CodePadTextView: NSTextView {
             return
         }
 
+        // Tab (48) key handling: indent selection or unindent with Shift
+        if event.keyCode == 48 {
+            if flags.contains(.shift) {
+                unindentSelectedLines()
+                return
+            } else if flags.isEmpty {
+                if selectedRange().length > 0 {
+                    indentSelectedLines()
+                    return
+                } else {
+                    insertText("    ", replacementRange: selectedRange())
+                    return
+                }
+            }
+        }
+
+        // Toggle Comment via Command+/ or Control+/
+        if (flags == .command || flags == .control) && (event.charactersIgnoringModifiers == "/" || event.characters == "/") {
+            toggleCommentForSelection()
+            return
+        }
+
         // Delete Line via Control+D or Command+D
         if (flags == .control || flags == .command) && event.charactersIgnoringModifiers?.lowercased() == "d" {
             deleteCurrentLine()
@@ -1455,8 +1488,22 @@ public class CodePadTextView: NSTextView {
             }
         }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if event.keyCode == 48 { // Tab
+            if flags.contains(.shift) {
+                unindentSelectedLines()
+                return true
+            } else if flags.isEmpty && selectedRange().length > 0 {
+                indentSelectedLines()
+                return true
+            }
+        }
         if flags == .command {
             if let chars = event.charactersIgnoringModifiers?.lowercased() {
+                if chars == "/" || event.characters == "/" {
+                    EditorDiagnostics.log("performKeyEquivalent: Toggle Comment via Command+/")
+                    toggleCommentForSelection()
+                    return true
+                }
                 if chars == "y" {
                     EditorDiagnostics.log("performKeyEquivalent: Redo via Command+Y")
                     appState?.redoActiveDocument()
@@ -1470,6 +1517,11 @@ public class CodePadTextView: NSTextView {
             }
         } else if flags == .control {
             if let chars = event.charactersIgnoringModifiers?.lowercased() {
+                if chars == "/" || event.characters == "/" {
+                    EditorDiagnostics.log("performKeyEquivalent: Toggle Comment via Control+/")
+                    toggleCommentForSelection()
+                    return true
+                }
                 if chars == "d" {
                     EditorDiagnostics.log("performKeyEquivalent: Delete Line via Control+D")
                     deleteCurrentLine()
@@ -1755,6 +1807,295 @@ public class CodePadTextView: NSTextView {
             let newCursorLoc = replaceRange.location + (insertion as NSString).length
             setSelectedRange(NSRange(location: newCursorLoc, length: 0))
             scrollRangeToVisible(selectedRange())
+        }
+    }
+
+    // MARK: - Multi-line Indentation (Tab) and Unindentation (Shift+Tab)
+    public func indentSelectedLines() {
+        completionController.dismiss()
+        guard isEditable, textStorage != nil else { return }
+        if let side = paneSide, let app = appState {
+            app.activePane = side
+            if let doc = document {
+                app.activeDocumentId = doc.id
+                if side == .left {
+                    app.leftActiveDocumentId = doc.id
+                    app.leftDocumentId = doc.id
+                } else if side == .right {
+                    app.rightActiveDocumentId = doc.id
+                    app.rightDocumentId = doc.id
+                }
+            }
+        }
+        let nsText = (self.string as NSString)
+        guard nsText.length > 0 else {
+            insertText("    ", replacementRange: selectedRange())
+            return
+        }
+
+        let sel = selectedRange()
+        let start = sel.location
+        let end = sel.location + sel.length
+        var effectiveEnd = end
+        if effectiveEnd > start && nsText.character(at: effectiveEnd - 1) == 0x0A {
+            effectiveEnd -= 1
+            if effectiveEnd > start && nsText.character(at: effectiveEnd - 1) == 0x0D {
+                effectiveEnd -= 1
+            }
+        }
+        let affectedRange = nsText.lineRange(for: NSRange(location: start, length: max(0, effectiveEnd - start)))
+        let affectedText = nsText.substring(with: affectedRange)
+        let rawLines = affectedText.components(separatedBy: "\n")
+
+        let indentStr = "    "
+        var modifiedLines: [String] = []
+        var totalAdded = 0
+        var firstLineAdded = 0
+
+        for (i, rawLine) in rawLines.enumerated() {
+            if i == rawLines.count - 1 && rawLine.isEmpty && affectedText.hasSuffix("\n") {
+                modifiedLines.append("")
+                continue
+            }
+            let cr = rawLine.hasSuffix("\r") ? "\r" : ""
+            let line = cr.isEmpty ? rawLine : String(rawLine.dropLast())
+            let indented = indentStr + line + cr
+            modifiedLines.append(indented)
+            let added = indentStr.count
+            totalAdded += added
+            if i == 0 {
+                firstLineAdded = added
+            }
+        }
+
+        let replacement = modifiedLines.joined(separator: "\n")
+        if shouldChangeText(in: affectedRange, replacementString: replacement) {
+            replaceCharacters(in: affectedRange, with: replacement)
+            didChangeText()
+
+            let newStart = (sel.location == affectedRange.location) ? sel.location : sel.location + firstLineAdded
+            let newLength = (sel.location == affectedRange.location) ? sel.length + totalAdded : max(0, sel.length + (totalAdded - firstLineAdded))
+            let newSel = NSRange(location: newStart, length: newLength)
+            setSelectedRange(newSel)
+            scrollRangeToVisible(selectedRange())
+
+            if let doc = document {
+                doc.selectedRange = newSel
+            }
+            appState?.scheduleSessionSave()
+        }
+    }
+
+    public func unindentSelectedLines() {
+        completionController.dismiss()
+        guard isEditable, textStorage != nil else { return }
+        if let side = paneSide, let app = appState {
+            app.activePane = side
+            if let doc = document {
+                app.activeDocumentId = doc.id
+                if side == .left {
+                    app.leftActiveDocumentId = doc.id
+                    app.leftDocumentId = doc.id
+                } else if side == .right {
+                    app.rightActiveDocumentId = doc.id
+                    app.rightDocumentId = doc.id
+                }
+            }
+        }
+        let nsText = (self.string as NSString)
+        guard nsText.length > 0 else { return }
+
+        let sel = selectedRange()
+        let start = sel.location
+        let end = sel.location + sel.length
+        var effectiveEnd = end
+        if effectiveEnd > start && nsText.character(at: effectiveEnd - 1) == 0x0A {
+            effectiveEnd -= 1
+            if effectiveEnd > start && nsText.character(at: effectiveEnd - 1) == 0x0D {
+                effectiveEnd -= 1
+            }
+        }
+        let affectedRange = nsText.lineRange(for: NSRange(location: start, length: max(0, effectiveEnd - start)))
+        let affectedText = nsText.substring(with: affectedRange)
+        let rawLines = affectedText.components(separatedBy: "\n")
+
+        var modifiedLines: [String] = []
+        var totalRemoved = 0
+        var firstLineRemoved = 0
+
+        for (i, rawLine) in rawLines.enumerated() {
+            if i == rawLines.count - 1 && rawLine.isEmpty && affectedText.hasSuffix("\n") {
+                modifiedLines.append("")
+                continue
+            }
+            let cr = rawLine.hasSuffix("\r") ? "\r" : ""
+            var line = cr.isEmpty ? rawLine : String(rawLine.dropLast())
+
+            var removed = 0
+            if line.hasPrefix("    ") {
+                line.removeFirst(4)
+                removed = 4
+            } else if line.hasPrefix("\t") {
+                line.removeFirst(1)
+                removed = 1
+            } else {
+                while removed < 4 && line.hasPrefix(" ") {
+                    line.removeFirst(1)
+                    removed += 1
+                }
+            }
+
+            modifiedLines.append(line + cr)
+            totalRemoved += removed
+            if i == 0 {
+                firstLineRemoved = removed
+            }
+        }
+
+        let replacement = modifiedLines.joined(separator: "\n")
+        if shouldChangeText(in: affectedRange, replacementString: replacement) {
+            replaceCharacters(in: affectedRange, with: replacement)
+            didChangeText()
+
+            let newStart = (sel.location == affectedRange.location) ? sel.location : max(affectedRange.location, sel.location - firstLineRemoved)
+            let newLength = (sel.location == affectedRange.location) ? max(0, sel.length - totalRemoved) : max(0, sel.length - (totalRemoved - firstLineRemoved))
+            let newSel = NSRange(location: newStart, length: newLength)
+            setSelectedRange(newSel)
+            scrollRangeToVisible(selectedRange())
+
+            if let doc = document {
+                doc.selectedRange = newSel
+            }
+            appState?.scheduleSessionSave()
+        }
+    }
+
+    // MARK: - Multi-line Toggle Comment (Command+/)
+    public func toggleCommentForSelection() {
+        completionController.dismiss()
+        guard isEditable, textStorage != nil else { return }
+        if let side = paneSide, let app = appState {
+            app.activePane = side
+            if let doc = document {
+                app.activeDocumentId = doc.id
+                if side == .left {
+                    app.leftActiveDocumentId = doc.id
+                    app.leftDocumentId = doc.id
+                } else if side == .right {
+                    app.rightActiveDocumentId = doc.id
+                    app.rightDocumentId = doc.id
+                }
+            }
+        }
+        let nsText = (self.string as NSString)
+        guard nsText.length > 0 else { return }
+
+        let language = document?.language ?? appState?.activeDocument?.language ?? "Java"
+        let (prefix, suffix) = SyntaxEngine.commentDelimiters(for: language)
+        let trimmedPrefix = prefix.trimmingCharacters(in: .whitespaces)
+        let trimmedSuffix = suffix?.trimmingCharacters(in: .whitespaces)
+
+        let sel = selectedRange()
+        let affectedRange: NSRange
+        if sel.length > 0 {
+            let start = sel.location
+            let end = sel.location + sel.length
+            var effectiveEnd = end
+            if effectiveEnd > start && nsText.character(at: effectiveEnd - 1) == 0x0A {
+                effectiveEnd -= 1
+                if effectiveEnd > start && nsText.character(at: effectiveEnd - 1) == 0x0D {
+                    effectiveEnd -= 1
+                }
+            }
+            affectedRange = nsText.lineRange(for: NSRange(location: start, length: max(0, effectiveEnd - start)))
+        } else {
+            let loc = min(sel.location, max(0, nsText.length - 1))
+            affectedRange = nsText.lineRange(for: NSRange(location: loc, length: 0))
+        }
+
+        let affectedText = nsText.substring(with: affectedRange)
+        let rawLines = affectedText.components(separatedBy: "\n")
+
+        // Determine if all non-empty lines are commented
+        var allCommented = true
+        var nonEmpties = 0
+        for (i, rawLine) in rawLines.enumerated() {
+            if i == rawLines.count - 1 && rawLine.isEmpty && affectedText.hasSuffix("\n") { continue }
+            let cr = rawLine.hasSuffix("\r") ? "\r" : ""
+            let line = cr.isEmpty ? rawLine : String(rawLine.dropLast())
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            nonEmpties += 1
+            let isCom = trimmed.hasPrefix(trimmedPrefix) && (trimmedSuffix.map { trimmed.hasSuffix($0) } ?? true)
+            if !isCom {
+                allCommented = false
+                break
+            }
+        }
+        let shouldUncomment = (nonEmpties > 0 && allCommented)
+
+        var modifiedLines: [String] = []
+        var totalDelta = 0
+        var firstLineDelta = 0
+
+        for (i, rawLine) in rawLines.enumerated() {
+            if i == rawLines.count - 1 && rawLine.isEmpty && affectedText.hasSuffix("\n") {
+                modifiedLines.append("")
+                continue
+            }
+            let cr = rawLine.hasSuffix("\r") ? "\r" : ""
+            var line = cr.isEmpty ? rawLine : String(rawLine.dropLast())
+            let originalLen = line.count
+
+            if shouldUncomment {
+                if let r = line.range(of: prefix) {
+                    line.removeSubrange(r)
+                } else if let r = line.range(of: trimmedPrefix) {
+                    line.removeSubrange(r)
+                }
+                if let closeMark = suffix {
+                    if let r = line.range(of: closeMark, options: .backwards) ?? line.range(of: trimmedSuffix ?? closeMark, options: .backwards) {
+                        line.removeSubrange(r)
+                    }
+                }
+            } else {
+                line = prefix + line + (suffix ?? "")
+            }
+            let delta = line.count - originalLen
+            totalDelta += delta
+            if i == 0 {
+                firstLineDelta = delta
+            }
+            modifiedLines.append(line + cr)
+        }
+
+        let replacement = modifiedLines.joined(separator: "\n")
+        if shouldChangeText(in: affectedRange, replacementString: replacement) {
+            replaceCharacters(in: affectedRange, with: replacement)
+            didChangeText()
+
+            let newStart: Int
+            let newLength: Int
+            if sel.length > 0 {
+                if sel.location == affectedRange.location {
+                    newStart = sel.location
+                    newLength = max(0, sel.length + totalDelta)
+                } else {
+                    newStart = max(affectedRange.location, sel.location + firstLineDelta)
+                    newLength = max(0, sel.length + (totalDelta - firstLineDelta))
+                }
+            } else {
+                newStart = max(affectedRange.location, sel.location + firstLineDelta)
+                newLength = 0
+            }
+            let newSel = NSRange(location: newStart, length: newLength)
+            setSelectedRange(newSel)
+            scrollRangeToVisible(selectedRange())
+
+            if let doc = document {
+                doc.selectedRange = newSel
+            }
+            appState?.scheduleSessionSave()
         }
     }
 
